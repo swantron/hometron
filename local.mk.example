@@ -1,0 +1,4 @@
+# Copy to local.mk (git-ignored) and fill in.
+HOST   = you@your-server
+# Tailscale IP for direct access, plus loopback for `tailscale serve` to proxy HTTPS to.
+LISTEN = 100.64.0.10:8080,127.0.0.1:8080

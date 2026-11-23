@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="hometron">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111418'/%3E%3Cpath d='M6 16 16 7l10 9v10H6z' fill='none' stroke='%235aa9ff' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>hometron</title>
+<style>
+  :root { color-scheme: dark; --bg:#111418; --card:#1b2027; --line:#2a313b; --text:#e6e9ee; --dim:#8b95a3;
+          --accent:#5aa9ff; --warn:#ffb454; --heat:#ff7a59; --cool:#59b6ff; --ok:#46c47e; --bad:#ff6b6b; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; font:15px/1.4 system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text);
+         padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:18px; margin:0; letter-spacing:.5px; }
+  header .status { color:var(--dim); font-size:13px; margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); }
+  .dot.on { background:var(--ok); } .dot.off { background:var(--bad); }
+
+  main { display:grid; gap:16px; padding:16px; grid-template-columns:1fr; grid-template-areas:"quick" "cams" "feed"; }
+  @media (min-width:1000px) { main { grid-template-columns:2fr 1fr; grid-template-areas:"cams quick" "cams feed"; grid-template-rows:auto 1fr; align-items:start; } }
+  #quick { grid-area:quick; display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); }
+  #camsec { grid-area:cams; } #feedsec { grid-area:feed; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .dim { color:var(--dim); font-size:12px; }
+  button { background:#26303b; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; touch-action:manipulation; }
+  button:hover { border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  button.on { border-color:var(--accent); background:#1d3550; }
+  button.armed { background:#5a1f1f; border-color:var(--bad); }
+  button.icon { padding:6px 10px; }
+
+  /* garage */
+  .garage { padding:14px; display:flex; align-items:center; gap:14px; }
+  .garage .glyph { width:52px; height:52px; border-radius:12px; display:grid; place-items:center; font-size:26px; background:#222a33; flex:none; }
+  .garage.open .glyph { background:#4a2d12; } .garage.closed .glyph { background:#173326; }
+  .garage .state { font-size:20px; font-weight:600; }
+  .garage.open .state { color:var(--warn); } .garage.closed .state { color:var(--ok); }
+  .garage .grow { flex:1; min-width:0; }
+  .garage .problem { color:var(--bad); font-size:12px; margin-top:2px; }
+  .garage.nosensor { display:block; padding:0; }
+  .garage .gview { position:relative; aspect-ratio:16/9; background:#000; display:grid; place-items:center; cursor:pointer; }
+  .garage .gview img { width:100%; height:100%; object-fit:cover; display:block; }
+  .garage .gbar { display:flex; align-items:center; gap:8px; padding:10px 12px; }
+  .garage .name { font-weight:600; }
+  .cam .snap { display:inline-flex; } .cam.live .snap { display:none; }
+  .cam.busy .view::after { content:'grabbing a still…'; position:absolute; bottom:8px; right:10px; font-size:12px; color:#c9d1db; }
+
+  /* thermostat */
+  .thermo { padding:14px; }
+  .thermo .top { display:flex; align-items:baseline; gap:10px; }
+  .thermo .now { font-size:44px; font-weight:300; line-height:1; }
+  .thermo .act.heating { color:var(--heat); } .thermo .act.cooling { color:var(--cool); }
+  .sp { display:flex; align-items:center; justify-content:space-between; margin:10px 0 0; }
+  .sp .val { font-size:22px; min-width:70px; text-align:center; }
+  .sp.heat .val { color:var(--heat); } .sp.cool .val { color:var(--cool); }
+  .sp button { width:44px; height:44px; font-size:20px; padding:0; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+
+  /* cameras */
+  .cams { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
+  .cam .view { position:relative; aspect-ratio:16/9; background:#000; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .cam video, .cam img { width:100%; height:100%; object-fit:cover; display:block; }
+  .cam .view .play { position:absolute; width:56px; height:56px; border-radius:50%; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); display:grid; place-items:center; font-size:22px; padding-left:4px; }
+  .cam .view .vhint { position:absolute; bottom:8px; color:#c9d1db; font-size:12px; }
+  .cam.live .view .play, .cam.live .view .vhint { display:none; }
+  .cam .bar { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+  .cam .bar .grow { flex:1; min-width:0; }
+  .cam .name { font-weight:600; }
+  .cam .ctl { display:none; gap:6px; } .cam.live .ctl { display:flex; }
+  .badge { position:absolute; top:8px; left:8px; color:#fff; font-size:11px; padding:2px 6px; border-radius:4px; font-weight:700; background:rgba(0,0,0,.6); }
+  .badge.live { background:#c0392b; }
+  .err { color:var(--bad); font-size:12px; padding:0 10px 8px; }
+  .err:empty { display:none; }
+
+  /* feed */
+  .chips { margin-left:auto; display:flex; gap:4px; }
+  .chips button { padding:2px 10px; font-size:12px; text-transform:none; letter-spacing:0; border-radius:999px; }
+  .feed { display:flex; flex-direction:column; gap:6px; max-height:75vh; overflow:auto; padding:8px; }
+  @media (max-width:999px) { .feed { max-height:none; } }
+  .day { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:8px 4px 2px; }
+  .day:first-child { margin-top:0; }
+  .ev { display:flex; gap:10px; align-items:center; padding:6px; border-radius:8px; }
+  .ev:hover { background:#202731; }
+  .ev .thumb { width:96px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; background:#000; flex:none; display:grid; place-items:center; font-size:22px; position:relative; }
+  .ev .thumb.media { cursor:pointer; }
+  .ev .thumb .tag { position:absolute; bottom:3px; right:4px; font-size:10px; background:rgba(0,0,0,.6); padding:0 4px; border-radius:3px; }
+  .ev .grow { flex:1; min-width:0; }
+  .ev .kind { font-weight:600; }
+  .ev .kind.chime, .ev .kind.opened { color:var(--warn); } .ev .kind.person { color:var(--accent); } .ev .kind.closed { color:var(--ok); }
+  .ev .when { color:var(--dim); font-size:12px; text-align:right; white-space:nowrap; }
+  .empty { color:var(--dim); font-size:13px; padding:10px; }
+
+  dialog { padding:0; border:0; background:#000; max-width:min(96vw, 1100px); border-radius:12px; }
+  dialog::backdrop { background:rgba(0,0,0,.8); }
+  dialog video, dialog img { display:block; width:100%; max-height:85vh; }
+  dialog .cap { color:var(--dim); font-size:13px; padding:8px 12px; background:var(--card); display:flex; justify-content:space-between; }
+  nav { display:flex; gap:4px; margin-left:8px; }
+  nav a { color:var(--dim); text-decoration:none; padding:4px 10px; border-radius:999px; font-size:13px; }
+  nav a.on { color:var(--text); background:#26303b; }
+  #netview { padding:16px; max-width:1100px; }
+  .netbar { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .netbar .dim { flex:1; font-size:13px; }
+  .hint { border:1px solid var(--line); border-left:3px solid var(--warn); background:var(--card); border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
+  .hint.good { border-left-color:var(--ok); }
+  table.net { width:100%; border-collapse:collapse; font-size:13px; }
+  table.net th { text-align:left; color:var(--dim); font-weight:500; font-size:12px; padding:8px 10px; border-bottom:1px solid var(--line); }
+  table.net td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.net tr:last-child td { border-bottom:0; }
+  table.net .mono { font-family:ui-monospace, Menlo, monospace; font-size:12px; color:var(--dim); }
+  .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; background:#26303b; color:var(--dim); margin-left:6px; }
+  .tag.tw { background:#4a2d12; color:var(--warn); font-weight:700; }
+  .tag.rt { background:#1d3550; color:var(--accent); }
+  @media (max-width:700px) { table.net .mac { display:none; } }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#3a1f22; border:1px solid var(--bad); color:#ffd7d7; padding:10px 14px; border-radius:10px; font-size:13px; max-width:90vw; display:none; z-index:10; }
+</style>
+</head>
+<body>
+<header><h1>hometron</h1><nav><a href="#" data-view="home">Home</a><a href="#network" data-view="network">Network</a></nav><span class="status"><button id="bell" class="icon" title="Doorbell and person alerts on this device">🔕</button><span id="status">loading…</span><span class="dot" id="dot" title="live updates"></span></span></header>
+<main>
+  <section id="quick"></section>
+  <section id="camsec"><h2>Cameras <span class="chips"><button id="snapall" title="Grab a fresh still from every camera">📷 Refresh stills</button></span></h2><div class="cams" id="cams"></div></section>
+  <section id="feedsec">
+    <h2>Activity <span class="chips"><button data-f="key" class="on">Important</button><button data-f="all">All</button></span></h2>
+    <div class="card feed" id="feed"><div class="empty">No events yet.</div></div>
+  </section>
+</main>
+<div id="netview" hidden>
+  <div class="netbar">
+    <div id="netsum" class="dim">Scanning…</div>
+    <button id="rescan">Scan again</button>
+  </div>
+  <div id="nethint"></div>
+  <div class="card"><table class="net"><thead><tr><th>Device</th><th>IP</th><th class="mac">MAC</th><th>Seen</th></tr></thead><tbody id="nethosts"></tbody></table></div>
+  <h2 style="margin-top:18px">Not answering now <span class="dim" style="text-transform:none;letter-spacing:0">seen in the last 14 days</span></h2>
+  <div class="card"><table class="net"><tbody id="netgone"></tbody></table></div>
+</div>
+<dialog id="lightbox"></dialog>
+<div id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    k.startsWith('on') ? el.addEventListener(k.slice(2), v) : el.setAttribute(k, v === true ? '' : v);
+  }
+  el.append(...kids.flat().filter(k => k != null && k !== false));
+  return el;
+};
+const ago = t => {
+  const s = (Date.now() - new Date(t)) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+};
+const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const dayOf = t => {
+  const d = new Date(t), today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+  return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+};
+const fToC = f => (f - 32) * 5 / 9;
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg.slice(0, 240); t.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = 'none', 6000);
+}
+
+async function command(id, command, params = {}) {
+  const r = await fetch(`/api/devices/${encodeURIComponent(id)}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command, params }) });
+  if (!r.ok) throw new Error((await r.text()).trim());
+  return r.json();
+}
+
+let devices = [];
+async function loadDevices() {
+  try {
+    const r = await fetch('/api/devices');
+    if (!r.ok) throw new Error(await r.text());
+    devices = await r.json();
+    $('#status').textContent = 'updated ' + clock(Date.now());
+  } catch (e) { $('#status').textContent = 'offline'; toast('Could not load devices: ' + e.message); return; }
+  renderQuick(); renderCams();
+}
+
+// ---------- quick controls: garage + thermostat ----------
+function renderQuick() {
+  const q = $('#quick');
+  const garages = devices.filter(d => d.kind === 'garage');
+  const thermo = devices.find(d => d.kind === 'thermostat');
+  // Don't rebuild a card while someone is mid-interaction with it.
+  for (const g of garages) {
+    const old = $(`[data-id="${CSS.escape(g.id)}"]`, q);
+    if (old?.dataset.busy) continue;
+    const card = garageCard(g);
+    old ? old.replaceWith(card) : q.append(card);
+  }
+  if (thermo && !pending) {
+    const old = $('.thermo', q), card = thermoCard(thermo);
+    old ? old.replaceWith(card) : q.append(card);
+  }
+}
+
+function lastEvent(deviceId, kinds) {
+  return events.find(e => e.deviceId === deviceId && (!kinds || kinds.includes(e.kind)));
+}
+
+// Without a door sensor the Tailwind can't know where the door is, so the card shows the
+// garage camera's latest still and one Press button, then re-snaps so you see what happened.
+function garageCam(g) {
+  const cams = devices.filter(d => d.kind === 'camera' || d.kind === 'doorbell');
+  return cams.find(c => g.camera && c.label === g.camera) || cams.find(c => /garage/i.test(c.label + ' ' + (c.room || '')));
+}
+
+function sensorlessGarageCard(g) {
+  const cam = garageCam(g);
+  const still = cam && stillFor(cam.id);
+  const btn = h('button', { disabled: !!g.problem }, 'Press');
+  const view = h('div', { class: 'gview', onclick: () => cam && openLiveFromCard(cam.id) },
+    still ? h('img', { src: still.src, alt: '' }) : h('div', { class: 'dim' }, cam ? 'No still yet. Tap to look.' : 'No garage camera'),
+    still ? h('span', { class: 'badge' }, ago(still.time)) : null);
+  const card = h('div', { class: 'card garage nosensor', 'data-id': g.id },
+    view,
+    h('div', { class: 'gbar' },
+      h('div', { class: 'grow' }, h('div', { class: 'name' }, g.label),
+        g.problem ? h('div', { class: 'problem' }, g.door === 'unknown' && !g.online ? "Can't reach the Tailwind: " + g.problem : g.problem)
+                  : h('div', { class: 'dim' }, 'Works like the wall button')),
+      cam ? h('button', { class: 'icon', title: 'New still', onclick: () => snapOnce(cam.id) }, '📷') : null,
+      btn));
+  let armTimer;
+  btn.addEventListener('click', async () => {
+    if (!btn.classList.contains('armed')) {
+      btn.classList.add('armed'); btn.textContent = 'Tap to press'; card.dataset.busy = 1;
+      armTimer = setTimeout(() => { delete card.dataset.busy; renderQuick(); }, 4000);
+      return;
+    }
+    clearTimeout(armTimer);
+    btn.disabled = true; btn.classList.remove('armed'); btn.textContent = 'Pressed…';
+    try { await command(g.id, 'garage.press'); }
+    catch (e) { toast(e.message); delete card.dataset.busy; renderQuick(); return; }
+    // A door takes ~15s to travel; then take a fresh still so the card shows where it ended up.
+    if (cam) { await new Promise(r => setTimeout(r, 15000)); await snapOnce(cam.id); }
+    delete card.dataset.busy; loadDevices();
+  });
+  return card;
+}
+
+function garageCard(g) {
+  if (g.noSensor) return sensorlessGarageCard(g);
+  const last = lastEvent(g.id, ['opened', 'closed']);
+  const known = g.door === 'open' || g.door === 'closed';
+  const verb = g.door === 'open' ? 'close' : 'open';
+  const btn = h('button', { disabled: !known || !!g.problem }, verb === 'open' ? 'Open' : 'Close');
+  const card = h('div', { class: `card garage ${g.door}`, 'data-id': g.id },
+    h('div', { class: 'glyph' }, g.door === 'open' ? '▲' : g.door === 'closed' ? '▼' : '?'),
+    h('div', { class: 'grow' },
+      h('div', { class: 'state' }, known ? (g.door === 'open' ? 'Open' : 'Closed') : 'Unknown'),
+      h('div', { class: 'dim' }, g.label, last ? ' · since ' + clock(last.time) : ''),
+      g.problem ? h('div', { class: 'problem' }, g.door === 'unknown' ? "Can't reach the controller: " + g.problem : g.problem) : null),
+    btn);
+  // A garage door is not a light switch: first tap arms, second tap within 4s sends.
+  let armTimer;
+  btn.addEventListener('click', async () => {
+    if (!btn.classList.contains('armed')) {
+      btn.classList.add('armed'); btn.textContent = `Tap to ${verb}`; card.dataset.busy = 1;
+      armTimer = setTimeout(() => { delete card.dataset.busy; renderQuick(); }, 4000);
+      return;
+    }
+    clearTimeout(armTimer);
+    btn.disabled = true; btn.classList.remove('armed'); btn.textContent = verb === 'open' ? 'Opening…' : 'Closing…';
+    try { await command(g.id, 'garage.' + verb); }
+    catch (e) { toast(e.message); }
+    // The door takes ~15s to travel; poll until it reports the new state (or give up).
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      await loadDevices();
+      const now = devices.find(d => d.id === g.id);
+      if (now && now.door !== g.door) break;
+    }
+    delete card.dataset.busy; renderQuick();
+  });
+  return card;
+}
+
+function thermoCard(t) {
+  const eco = t.eco === 'MANUAL_ECO';
+  const action = t.hvac === 'HEATING' ? 'heating' : t.hvac === 'COOLING' ? 'cooling' : 'idle';
+  const row = (cls, label, val, key) => val == null || eco ? null : h('div', { class: 'sp ' + cls },
+    h('button', { onclick: () => nudge(t, key, -1), 'aria-label': label + ' down' }, '−'),
+    h('div', {}, h('div', { class: 'dim', style: 'text-align:center' }, label), h('div', { class: 'val' }, Math.round(val) + '°')),
+    h('button', { onclick: () => nudge(t, key, +1), 'aria-label': label + ' up' }, '+'));
+  const off = t.mode === 'OFF';
+  return h('div', { class: 'card thermo', 'data-id': t.id },
+    h('div', { class: 'top' },
+      h('div', { class: 'now' }, t.tempF != null ? Math.round(t.tempF) + '°' : '—'),
+      h('div', {},
+        h('div', { class: 'act ' + action }, eco ? 'Eco' : off ? 'Off' : action[0].toUpperCase() + action.slice(1)),
+        h('div', { class: 'dim' }, t.label, t.humidity != null ? ` · ${t.humidity}% RH` : '', t.online ? '' : ' · OFFLINE'))),
+    (t.mode === 'HEAT' || t.mode === 'HEATCOOL') ? row('heat', 'heat to', t.heatF, 'heat') : null,
+    (t.mode === 'COOL' || t.mode === 'HEATCOOL') ? row('cool', 'cool to', t.coolF, 'cool') : null,
+    h('div', { class: 'modes' },
+      (t.modes || []).map(m => h('button', { class: m === t.mode && !eco ? 'on' : null, onclick: () => setMode(t, m) }, m === 'HEATCOOL' ? 'Heat·Cool' : m[0] + m.slice(1).toLowerCase())),
+      h('button', { class: eco ? 'on' : null, onclick: () => setEco(t, !eco) }, 'Eco')));
+}
+
+let nudgeTimer, pending = null;
+function nudge(t, key, delta) {
+  // Batch rapid taps into one API call (SDM rate-limits thermostat commands).
+  pending = pending || { heat: t.heatF, cool: t.coolF };
+  pending[key] = Math.round(pending[key]) + delta;
+  if (t.mode === 'HEATCOOL' && pending.cool - pending.heat < 3) { pending[key] -= delta; return; }
+  t.heatF = pending.heat; t.coolF = pending.cool;
+  $('.thermo').replaceWith(thermoCard(t));
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(async () => {
+    const p = pending;
+    try {
+      if (t.mode === 'HEATCOOL') await command(t.id, 'sdm.devices.commands.ThermostatTemperatureSetpoint.SetRange', { heatCelsius: fToC(p.heat), coolCelsius: fToC(p.cool) });
+      else if (t.mode === 'HEAT') await command(t.id, 'sdm.devices.commands.ThermostatTemperatureSetpoint.SetHeat', { heatCelsius: fToC(p.heat) });
+      else if (t.mode === 'COOL') await command(t.id, 'sdm.devices.commands.ThermostatTemperatureSetpoint.SetCool', { coolCelsius: fToC(p.cool) });
+    } catch (e) { toast(e.message); }
+    pending = null;
+    setTimeout(loadDevices, 1500);
+  }, 1200);
+}
+async function setMode(t, mode) {
+  try {
+    if (t.eco === 'MANUAL_ECO') await command(t.id, 'sdm.devices.commands.ThermostatEco.SetMode', { mode: 'OFF' });
+    await command(t.id, 'sdm.devices.commands.ThermostatMode.SetMode', { mode });
+  } catch (e) { toast(e.message); }
+  setTimeout(loadDevices, 1500);
+}
+async function setEco(t, on) {
+  try { await command(t.id, 'sdm.devices.commands.ThermostatEco.SetMode', { mode: on ? 'MANUAL_ECO' : 'OFF' }); } catch (e) { toast(e.message); }
+  setTimeout(loadDevices, 1500);
+}
+
+// ---------- cameras ----------
+const streams = {}; // deviceId -> {pc, sessionId, timer, video}
+
+function renderCams() {
+  const wrap = $('#cams');
+  const cams = devices.filter(d => d.kind === 'camera' || d.kind === 'doorbell')
+    .sort((a, b) => (b.kind === 'doorbell') - (a.kind === 'doorbell') || a.label.localeCompare(b.label));
+  for (const d of cams) {
+    let card = $(`[data-id="${CSS.escape(d.id)}"]`, wrap);
+    if (!card) {
+      card = h('div', { class: 'card cam', 'data-id': d.id },
+        h('div', { class: 'view', onclick: () => streams[d.id] ? null : startLive(d.id) }),
+        h('div', { class: 'bar' },
+          h('div', { class: 'grow' }, h('div', { class: 'name' }, d.label), h('div', { class: 'dim sub' })),
+          h('button', { class: 'icon snap', title: 'New still', onclick: () => snapOnce(d.id) }, '📷'),
+          h('div', { class: 'ctl' },
+            h('button', { class: 'icon mute', title: 'Sound', onclick: () => toggleMute(d.id) }, '🔇'),
+            h('button', { class: 'icon', title: 'Full screen', onclick: () => fullscreen(d.id) }, '⛶'),
+            h('button', { onclick: () => stopLive(d.id) }, 'Stop'))),
+        h('div', { class: 'err' }));
+      wrap.append(card);
+    }
+    if (!streams[d.id]) showStill(d.id);
+  }
+}
+
+function showStill(id) {
+  const card = $(`[data-id="${CSS.escape(id)}"]`); if (!card) return;
+  const dev = devices.find(d => d.id === id);
+  const last = events.find(e => e.deviceId === id);
+  $('.sub', card).textContent = last ? `${label(last)} · ${ago(last.time)}` : (dev?.kind === 'doorbell' ? 'Doorbell' : dev?.room || '');
+  const still = stillFor(id);
+  const kids = [];
+  if (still) {
+    kids.push(still.video
+      ? h('video', { src: still.src, muted: true, autoplay: true, loop: true, playsinline: true })
+      : h('img', { src: still.src, alt: '' }));
+    kids.push(h('span', { class: 'badge' }, still.label ? `${still.label} · ${ago(still.time)}` : ago(still.time)));
+  }
+  kids.push(h('div', { class: 'play' }, '▶'));
+  if (!still) kids.push(h('div', { class: 'vhint' }, 'Tap for live view · 📷 for a still'));
+  $('.view', card).replaceChildren(...kids);
+  $$('video', card).forEach(v => v.muted = true);
+}
+
+async function startLive(id) {
+  const card = $(`[data-id="${CSS.escape(id)}"]`), err = $('.err', card), view = $('.view', card);
+  err.textContent = '';
+  view.append(h('span', { class: 'badge live' }, 'CONNECTING'));
+  // Nest wants an offer with audio, video (both receive-only) and a data channel, in that order.
+  const pc = new RTCPeerConnection();
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.createDataChannel('dataSendChannel');
+  const video = h('video', { autoplay: true, playsinline: true, muted: true });
+  video.muted = true;
+  video.addEventListener('playing', () => setTimeout(() => grab(id), 2000), { once: true });
+  const ms = new MediaStream();
+  pc.ontrack = e => { ms.addTrack(e.track); video.srcObject = ms; };
+  pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed') { err.textContent = 'stream dropped'; stopLive(id); } };
+  streams[id] = { pc, video, sessionId: null, timer: null };
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+    const res = await command(id, 'sdm.devices.commands.CameraLiveStream.GenerateWebRtcStream', { offerSdp: pc.localDescription.sdp });
+    if (!streams[id]) { command(id, 'sdm.devices.commands.CameraLiveStream.StopWebRtcStream', { mediaSessionId: res.mediaSessionId }).catch(() => {}); return; }
+    await pc.setRemoteDescription({ type: 'answer', sdp: res.answerSdp });
+    streams[id].sessionId = res.mediaSessionId;
+    // Streams expire after 5 minutes unless extended.
+    streams[id].timer = setInterval(async () => {
+      try { const r = await command(id, 'sdm.devices.commands.CameraLiveStream.ExtendWebRtcStream', { mediaSessionId: streams[id].sessionId }); streams[id].sessionId = r.mediaSessionId || streams[id].sessionId; }
+      catch (e) { err.textContent = 'extend failed: ' + e.message; stopLive(id); }
+    }, 4 * 60 * 1000);
+    view.replaceChildren(video, h('span', { class: 'badge live' }, 'LIVE'));
+    card.classList.add('live');
+    // Watching a camera refreshes its still: once the picture settles, then every minute.
+    streams[id].snapTimer = setInterval(() => grab(id), 60 * 1000);
+    $('.mute', card).textContent = '🔇';
+  } catch (e) {
+    pc.close(); delete streams[id]; showStill(id);
+    err.textContent = e.message.slice(0, 200);
+  }
+}
+
+function stopLive(id) {
+  const s = streams[id]; if (!s) return;
+  if (!s.noFinalGrab) grab(id); // last look before hanging up
+  clearInterval(s.timer); clearInterval(s.snapTimer); s.pc.close(); delete streams[id];
+  if (s.sessionId) command(id, 'sdm.devices.commands.CameraLiveStream.StopWebRtcStream', { mediaSessionId: s.sessionId }).catch(() => {});
+  const card = $(`[data-id="${CSS.escape(id)}"]`); card?.classList.remove('live');
+  showStill(id);
+}
+// ---------- stills ----------
+let snaps = {}; // deviceId -> {media, time}, frames grabbed from live view
+async function loadSnaps() { try { snaps = await (await fetch('/api/snapshots')).json(); } catch {} }
+
+// stillFor picks the newest picture we have of a camera: a grabbed frame or an event clip/image.
+function stillFor(id) {
+  const s = snaps[id];
+  const ev = events.find(e => e.deviceId === id && e.media);
+  const fromSnap = s && { src: '/media/' + s.media + '?t=' + encodeURIComponent(s.time), time: s.time };
+  const fromEv = ev && { src: '/media/' + ev.media, time: ev.time, video: ev.media.endsWith('.mp4'), label: label(ev) };
+  if (fromSnap && fromEv) return new Date(fromSnap.time) >= new Date(fromEv.time) ? fromSnap : fromEv;
+  return fromSnap || fromEv || null;
+}
+
+// grab draws the current live frame to a canvas and uploads it as the camera's still.
+function grab(id) {
+  const v = streams[id]?.video;
+  if (!v || !v.videoWidth) return Promise.resolve(false);
+  const c = document.createElement('canvas');
+  const scale = Math.min(1, 1280 / v.videoWidth);
+  c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  return new Promise(resolve => c.toBlob(async blob => {
+    if (!blob) return resolve(false);
+    try {
+      const r = await fetch(`/api/devices/${encodeURIComponent(id)}/snapshot`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+      if (r.ok) { snaps[id] = await r.json(); refreshStills(id); }
+      resolve(r.ok);
+    } catch { resolve(false); }
+  }, 'image/jpeg', 0.82));
+}
+
+function refreshStills(id) {
+  if (!streams[id]) showStill(id);
+  if (devices.some(d => d.kind === 'garage' && d.noSensor)) renderQuick();
+}
+
+// snapOnce opens a stream just long enough to get a frame, then hangs up.
+async function snapOnce(id) {
+  if (streams[id]) return grab(id);
+  const card = $(`[data-id="${CSS.escape(id)}"].cam`);
+  card?.classList.add('busy');
+  try {
+    await startLive(id);
+    for (let i = 0; i < 30 && streams[id] && !streams[id].video.videoWidth; i++) await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 1500)); // let exposure settle after the first frame
+    if (!(await grab(id))) toast('Could not get a still from that camera.');
+    if (streams[id]) streams[id].noFinalGrab = true;
+  } finally {
+    stopLive(id);
+    card?.classList.remove('busy');
+  }
+}
+
+function openLiveFromCard(id) {
+  const card = $(`[data-id="${CSS.escape(id)}"].cam`);
+  card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (!streams[id]) startLive(id);
+}
+
+function toggleMute(id) {
+  const s = streams[id]; if (!s) return;
+  s.video.muted = !s.video.muted;
+  $(`[data-id="${CSS.escape(id)}"] .mute`).textContent = s.video.muted ? '🔇' : '🔊';
+}
+function fullscreen(id) {
+  const v = streams[id]?.video; if (!v) return;
+  (v.requestFullscreen || v.webkitEnterFullscreen || (() => {})).call(v);
+}
+// Phones park the tab when you switch apps; don't leave Google streaming into the void.
+addEventListener('pagehide', () => Object.keys(streams).forEach(stopLive));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) Object.keys(streams).forEach(stopLive);
+  else { loadDevices(); reloadEvents(); }
+});
+
+// ---------- activity ----------
+let events = []; // newest first
+let filter = localStorage.getItem('feedFilter') || 'key';
+const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed']);
+const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼' };
+const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed' })[ev.kind] || ev.kind;
+
+function upsertEvent(ev) {
+  events = [ev, ...events.filter(e => e.id !== ev.id)].sort((a, b) => new Date(b.time) - new Date(a.time));
+}
+
+function renderFeed() {
+  const feed = $('#feed');
+  const shown = events.filter(e => filter === 'all' || KEY.has(e.kind));
+  if (!shown.length) {
+    feed.replaceChildren(h('div', { class: 'empty' }, filter === 'all' ? 'No events yet.' : 'Nothing important yet. Motion and sound are under All.'));
+    return;
+  }
+  const rows = []; let day = null;
+  for (const ev of shown) {
+    const d = dayOf(ev.time);
+    if (d !== day) { rows.push(h('div', { class: 'day' }, d)); day = d; }
+    let thumb;
+    if (ev.media) {
+      const isVid = ev.media.endsWith('.mp4');
+      thumb = h('div', { class: 'thumb media', onclick: () => openMedia(ev) },
+        isVid ? h('video', { src: '/media/' + ev.media + '#t=0.5', muted: true, playsinline: true, preload: 'metadata', class: 'thumb' })
+              : h('img', { src: '/media/' + ev.media, loading: 'lazy', alt: '', class: 'thumb' }),
+        isVid ? h('span', { class: 'tag' }, '▶') : null);
+    } else thumb = h('div', { class: 'thumb' }, ICON[ev.kind] || '•');
+    rows.push(h('div', { class: 'ev' },
+      thumb,
+      h('div', { class: 'grow' },
+        h('div', { class: 'kind ' + ev.kind }, label(ev), ev.count > 1 ? h('span', { class: 'dim' }, ` ×${ev.count}`) : null),
+        h('div', { class: 'dim' }, ev.device)),
+      h('div', { class: 'when' }, clock(ev.time), h('br'), h('span', { 'data-ago': ev.time }, ago(ev.time)))));
+  }
+  feed.replaceChildren(...rows);
+}
+
+function openMedia(ev) {
+  const box = $('#lightbox');
+  box.replaceChildren(
+    ev.media.endsWith('.mp4') ? h('video', { src: '/media/' + ev.media, controls: true, autoplay: true, playsinline: true }) : h('img', { src: '/media/' + ev.media, alt: '' }),
+    h('div', { class: 'cap' }, h('span', {}, `${label(ev)} · ${ev.device}`), h('span', {}, new Date(ev.time).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }))));
+  box.showModal();
+}
+$('#lightbox').addEventListener('click', e => { if (e.target.tagName !== 'VIDEO') e.currentTarget.close(); });
+$('#lightbox').addEventListener('close', () => $('#lightbox').replaceChildren());
+
+$$('.chips button').forEach(b => {
+  b.classList.toggle('on', b.dataset.f === filter);
+  b.addEventListener('click', () => {
+    filter = b.dataset.f; localStorage.setItem('feedFilter', filter);
+    $$('.chips button').forEach(x => x.classList.toggle('on', x === b));
+    renderFeed();
+  });
+});
+
+async function reloadEvents() {
+  try { [events] = await Promise.all([fetch('/api/events').then(r => r.json()), loadSnaps()]); } catch { return; }
+  renderFeed(); renderCams(); renderQuick();
+}
+
+function connectStream() {
+  const es = new EventSource('/api/events/stream');
+  let dropped = false;
+  es.onopen = () => { $('#dot').className = 'dot on'; if (dropped) reloadEvents(); dropped = false; };
+  es.onerror = () => { $('#dot').className = 'dot off'; dropped = true; };
+  es.onmessage = m => {
+    const ev = JSON.parse(m.data);
+    upsertEvent(ev); renderFeed();
+    if (!streams[ev.deviceId]) showStill(ev.deviceId);
+    if (ev.kind === 'opened' || ev.kind === 'closed') loadDevices();
+  };
+}
+
+// Keep "3m ago" honest without re-rendering media.
+setInterval(() => {
+  $$('[data-ago]').forEach(el => el.textContent = ago(el.dataset.ago));
+  for (const card of $$('.cam')) {
+    const last = events.find(e => e.deviceId === card.dataset.id);
+    if (last) $('.sub', card).textContent = `${label(last)} · ${ago(last.time)}`;
+  }
+}, 60 * 1000);
+
+// ---------- push alerts ----------
+// Phones only allow push (and home-screen install) on https, which `tailscale serve` provides.
+const pushOK = window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window;
+let swReg = null;
+
+async function initPush() {
+  const bell = $('#bell');
+  if (!pushOK) { bell.title = 'Alerts need the https:// address (tailscale serve)'; return; }
+  try { swReg = await navigator.serviceWorker.register('/sw.js'); } catch (e) { bell.title = 'Service worker failed: ' + e.message; return; }
+  const sub = await swReg.pushManager.getSubscription();
+  setBell(!!sub && Notification.permission === 'granted');
+}
+function setBell(on) { const b = $('#bell'); b.textContent = on ? '🔔' : '🔕'; b.classList.toggle('on', on); }
+
+function keyBytes(b64) {
+  const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - b64.length % 4) % 4));
+  return Uint8Array.from(s, c => c.charCodeAt(0));
+}
+async function postJSON(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error((await r.text()).trim());
+  return r.json();
+}
+
+$('#bell').addEventListener('click', async () => {
+  if (!pushOK) {
+    toast(window.isSecureContext ? "This browser doesn't support push alerts." : 'Alerts need the https:// address. On iPhone, add hometron to the Home Screen first.');
+    return;
+  }
+  try {
+    const existing = await swReg.pushManager.getSubscription();
+    if (existing) {
+      await postJSON('/api/push/unsubscribe', { endpoint: existing.endpoint }).catch(() => {});
+      await existing.unsubscribe();
+      setBell(false); toast('Alerts off on this device.');
+      return;
+    }
+    if (await Notification.requestPermission() !== 'granted') { toast('Notifications are blocked for this site in the browser settings.'); return; }
+    const { publicKey } = await (await fetch('/api/push/key')).json();
+    const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) });
+    await postJSON('/api/push/subscribe', { ...sub.toJSON(), kinds: ['chime', 'person'] });
+    await postJSON('/api/push/test', { endpoint: sub.endpoint });
+    setBell(true);
+  } catch (e) { toast('Alerts: ' + e.message); }
+});
+
+// ---------- network ----------
+const ROUTERISH = /google|asus|tp-?link|netgear|eero|linksys|ubiquiti|arris|technicolor|sagemcom|cisco|mikrotik/i;
+async function loadNetwork(rescan) {
+  $('#netsum').textContent = rescan ? 'Scanning… (about 5 seconds)' : 'Loading…';
+  $('#rescan').disabled = true;
+  try {
+    const r = rescan ? await fetch('/api/network/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+                     : await fetch('/api/network');
+    if (!r.ok) throw new Error(await r.text());
+    renderNetwork(await r.json());
+  } catch (e) { $('#netsum').textContent = 'Scan failed: ' + e.message; }
+  $('#rescan').disabled = false;
+}
+
+function hostRow(x, gone) {
+  const routerish = !x.gateway && !x.self && ROUTERISH.test(x.vendor || '');
+  const who = x.private ? 'Phone / laptop / VM (private MAC)' : (x.vendor || 'Unknown maker');
+  const seen = gone ? 'last ' + ago(x.lastSeen) : 'since ' + new Date(x.firstSeen).toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return h('tr', {},
+    h('td', {},
+      h('div', {}, x.name || who,
+        x.tailwind ? h('span', { class: 'tag tw' }, 'TAILWIND') : null,
+        x.gateway ? h('span', { class: 'tag rt' }, 'gateway') : null,
+        routerish ? h('span', { class: 'tag rt' }, 'router?') : null,
+        x.self ? h('span', { class: 'tag' }, 'this server') : null,
+        x.web && !x.tailwind ? h('span', { class: 'tag' }, 'web') : null),
+      x.name ? h('div', { class: 'dim' }, who) : null),
+    h('td', { class: 'mono' }, x.web ? h('a', { href: 'http://' + x.ip + '/', target: '_blank', rel: 'noopener', style: 'color:inherit' }, x.ip) : x.ip),
+    h('td', { class: 'mono mac' }, x.mac),
+    h('td', { class: 'dim' }, seen));
+}
+
+function renderNetwork(s) {
+  if (s.error) { $('#netsum').textContent = 'Scan failed: ' + s.error; return; }
+  const gw = s.hosts.find(x => x.gateway);
+  $('#netsum').textContent = [`${s.hosts.length} devices on ${s.address} (${s.interface})`, `gateway ${s.gateway}` + (gw && gw.vendor ? ' · ' + gw.vendor : ''), `scanned ${ago(s.at)} in ${s.took}`].join(' · ');
+  const tw = s.hosts.find(x => x.tailwind);
+  const routers = s.hosts.filter(x => !x.gateway && !x.self && ROUTERISH.test(x.vendor || ''));
+  let hint;
+  if (tw) hint = h('div', { class: 'hint good' }, 'Found a Tailwind at ' + tw.ip + '. Put that IP and its Local Control Key in tailwind.json on the server.');
+  else {
+    let msg = 'No Tailwind answering on ' + s.address + '. hometron only sees the network this server is connected to.';
+    if (routers.length) msg += ' ' + routers.map(r => r.vendor + ' at ' + r.ip).join(', ') + (routers.length === 1 ? ' looks' : ' look') +
+      ' like another router: everything connected through it is hidden from here and shows up as that one device.';
+    hint = h('div', { class: 'hint' }, msg);
+  }
+  $('#nethint').replaceChildren(hint);
+  $('#nethosts').replaceChildren(...s.hosts.map(x => hostRow(x, false)));
+  const gone = s.gone || [];
+  $('#netgone').replaceChildren(...(gone.length ? gone.map(x => hostRow(x, true)) : [h('tr', {}, h('td', { class: 'dim' }, 'Nothing has dropped off.'))]));
+}
+$('#rescan').addEventListener('click', () => loadNetwork(true));
+// One camera at a time: each needs its own stream, and Google rate-limits stream starts.
+$('#snapall').addEventListener('click', async e => {
+  const b = e.currentTarget; b.disabled = true;
+  const cams = $$('.cam').map(c => c.dataset.id).filter(id => !streams[id]);
+  for (let i = 0; i < cams.length; i++) { b.textContent = '📷 ' + (i + 1) + '/' + cams.length; await snapOnce(cams[i]); }
+  b.textContent = '📷 Refresh stills'; b.disabled = false;
+});
+
+function showView() {
+  const net = location.hash === '#network';
+  $('main').hidden = net; $('#netview').hidden = !net;
+  $$('nav a').forEach(a => a.classList.toggle('on', (a.dataset.view === 'network') === net));
+  if (net) { Object.keys(streams).forEach(stopLive); loadNetwork(false); }
+}
+addEventListener('hashchange', showView);
+$('nav a[data-view="home"]').addEventListener('click', e => { e.preventDefault(); history.pushState(null, '', location.pathname); showView(); });
+
+(async () => {
+  showView();
+  initPush();
+  await reloadEvents();
+  await loadDevices();
+  connectStream();
+  setInterval(() => { if (!document.hidden) loadDevices(); }, 60 * 1000);
+})();
+</script>
+</body>
+</html>

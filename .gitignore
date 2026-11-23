@@ -1,0 +1,14 @@
+# build output
+bin/
+hometron
+
+# local state / secrets (live on the server under ~/nest)
+credentials.json
+token*.json
+token.access
+*.jsonl
+events/
+
+.DS_Store
+*.swp
+local.mk
