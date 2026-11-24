@@ -55,7 +55,7 @@ type PushSub struct {
 // pushSubject is the VAPID "sub" claim: how a push service can reach the sender.
 const pushSubject = "https://github.com/swantron/hometron"
 
-var defaultAlertKinds = []string{"chime", "person"}
+var defaultAlertKinds = []string{"chime", "person", "done", "reminder", "internet", "fridge"}
 
 func loadPush(stateDir string) (*Push, error) {
 	p := &Push{dir: stateDir, http: &http.Client{Timeout: 15 * time.Second}, subs: map[string]PushSub{}, last: map[string]time.Time{}}
@@ -188,6 +188,16 @@ func (p *Push) Notify(ev Event) {
 		msg = PushMessage{Title: "Person", Body: "Seen on " + ev.Device}
 	case "opened", "closed":
 		msg = PushMessage{Title: "Garage " + ev.Kind, Body: ev.Device}
+	case "done":
+		msg = PushMessage{Title: "🧺 " + ev.Device + " is done", Body: "Time to move the laundry."}
+	case "reminder":
+		msg = PushMessage{Title: "🗑️ " + ev.Device, Body: "Reminder from hometron"}
+	case "internet":
+		msg = PushMessage{Title: "🌐 Internet is back", Body: ev.Device}
+	case "fridge":
+		msg = PushMessage{Title: "🧊 " + ev.Device, Body: "From the fridge"}
+	case "network":
+		msg = PushMessage{Title: "📡 Network", Body: ev.Device}
 	default:
 		msg = PushMessage{Title: ev.Kind, Body: ev.Device}
 	}

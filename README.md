@@ -1,12 +1,29 @@
 # hometron
 
-One dashboard for Nest cameras, the doorbell, the thermostat and the garage door. It talks straight to Google's
+One dashboard for the house: Nest cameras, the doorbell, the thermostat, the garage door, laundry, weather, the family calendar, and printer and internet status. It talks straight to Google's
 [Smart Device Management API](https://developers.google.com/nest/device-access), so nobody in the
 house has to open the Google Home app or the Nest app.
 
 - **Cameras / doorbell:** live view (WebRTC, straight from Google to the browser), plus a snapshot or
   clip for ring / person events on cameras that support it (see Gotchas).
-- **Thermostat:** current temperature and humidity, heat/cool setpoints, mode, eco.
+- **Thermostat:** current temperature and humidity, heat/cool setpoints, mode, eco, plus a 24-hour
+  chart (inside, setpoint, outside, with heating/cooling shaded) and how long the heat ran today and
+  yesterday. Recorded from the thermostat updates Google already sends.
+- **Doorbell chime (optional):** rings Google/Nest speakers when the doorbell is pressed, over the local
+  Cast protocol, with an optional spoken line made by macOS's `say`. No Assistant or cloud involved.
+- **Laundry (optional):** LG washer/dryer state and time left, and a "done" alert, via LG's official
+  ThinQ Connect API (cloud; the machines have no local API).
+- **Weather (optional):** outside now and the next few periods from the National Weather Service.
+- **Calendar and chores (optional):** this week from Google Calendar's secret iCal address, plus trash and
+  recycling days with a reminder the night before.
+- **Printer:** ink levels and state over IPP (found automatically).
+- **Network health:** every minute, pings each step out of the house (Wi-Fi → the router it plugs into →
+  the ISP's first hop → the internet) plus a DNS lookup, so a problem is pinned to one of them. A 24-hour
+  response-time/packet-loss chart, 7/30-day uptime with an outage log, Google/Nest Wifi units' uptime and
+  firmware (from their unauthenticated local status page, with a feed entry when one restarts), always-on
+  devices dropping off or new devices joining, Tailscale devices with key-expiry warnings, and the
+  server's own Wi-Fi link. Speed tests run in the browser of whoever taps the button (against Cloudflare's
+  public endpoints), since a server on Wi-Fi can't measure the internet itself; results are kept.
 - **Garage door (optional):** open/closed state and a two-tap open/close, via a Tailwind iQ3's
   local API. No cloud involved.
 - **Activity feed:** events stream in live (Server-Sent Events). Repeated motion folds into one row,
@@ -61,6 +78,64 @@ You need a consumer Google account that owns the Nest devices. Workspace account
    ```
    The server has to be on the same network as the Tailwind. Without this file the garage card simply
    doesn't appear.
+
+### Optional extras
+
+Each is a file in `~/nest/` (chmod 600). Leave it out and that feature stays off. Restart hometron
+(`make restart`) after adding one.
+
+- **`cast.json`: doorbell chime on speakers.** Names as shown in the Google Home app:
+  ```json
+  {"speakers": ["Kitchen speaker"], "say": "Someone is at the front door", "volume": 0.6}
+  ```
+  `say` and `volume` are optional; the speaker's own volume is restored afterwards. The speakers fetch the
+  sound from the server's LAN address on port 8081 (only the sound is served there). Casting stops
+  whatever the speaker was playing. `GET /api/chime/speakers` lists what was found.
+- **`lg.json`: LG washer and dryer.** Create a personal access token at
+  <https://connect-pat.lgthinq.com> (sign in with the LG ThinQ account the machines are in):
+  ```json
+  {"token": "thinqpat_…", "country": "US"}
+  ```
+- **`weather.json`: outside weather** (US only; two decimals is plenty):
+  ```json
+  {"lat": 45.68, "lon": -111.04}
+  ```
+- **`calendar.json`: calendar and chores.** In Google Calendar → Settings → your calendar →
+  *Secret address in iCal format* (anyone with that link can read the calendar, so keep it in this file
+  only):
+  ```json
+  {
+    "calendars": [{"name": "Family", "url": "https://calendar.google.com/calendar/ical/…/private-…/basic.ics"}],
+    "chores": [
+      {"name": "Trash", "weekday": "Tuesday"},
+      {"name": "Recycling", "weekday": "Tuesday", "weeks": 2, "from": "2026-12-01"}
+    ],
+    "remind": "19:00"
+  }
+  ```
+- **`smartthings.json`: Samsung fridge** (cloud; Samsung appliances have no local API). Door left open
+  2+ minutes, fridge above 45°F or freezer above 15°F for half an hour, plus temperatures, water filter
+  and ice maker on the dashboard. Either a personal access token from
+  <https://account.smartthings.com/tokens> (scope: devices, read), which SmartThings expires after 24 hours,
+  so only good for a test:
+  ```json
+  {"token": "..."}
+  ```
+  or, to keep it working, an OAuth app (created with the SmartThings CLI or Developer Workspace, with
+  scopes `r:devices:*` and `r:locations:*`, and this server's `/smartthings/callback` as its redirect URI):
+  ```json
+  {"clientId": "...", "clientSecret": "...", "redirectUri": "https://<server>/smartthings/callback"}
+  ```
+  then tap **Connect** on the fridge card once. hometron refreshes the sign-in itself.
+
+  **Without the paid plan** (Samsung's API plans start at $4.99/month as of late 2026; personal
+  tokens are the free option and last 24 hours), add `"auto": true` next to the token. hometron then
+  makes a fresh read-only token every ~20 hours the same way the tokens page does, in a headless Chrome
+  profile (`~/nest/smartthings-browser`, needs Google Chrome on the server) that someone signed into
+  once. It never stores the Samsung password. When that session expires, the fridge card shows
+  **Sign in**, which opens Chrome on the server's screen for a Screen Sharing sign-in. Only tokens it
+  created (named `hometron-auto-…`) are ever deleted.
+- **`printer.json`:** only if the printer isn't found automatically: `{"host": "192.168.1.20"}`.
 
 ## HTTPS (needed for alerts and installing it as an app)
 

@@ -171,7 +171,7 @@ func TestSnapshotRoute(t *testing.T) {
 	dir := t.TempDir()
 	snaps := newSnapshots(dir)
 	pu, _ := loadPush(dir)
-	h := routes([]Provider{fakeProvider{}}, newTestEvents(t), newNetwork(dir), snaps, pu, dir)
+	h := routes([]Provider{fakeProvider{}}, newTestEvents(t), newNetwork(dir), snaps, pu, nil, dir)
 	jpeg := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, make([]byte, 100)...)
 
 	post := func(id, ctype, origin string, body []byte) int {
@@ -223,4 +223,41 @@ func (fakeProvider) Devices(context.Context) ([]deviceView, error) { return nil,
 func (fakeProvider) Owns(_ context.Context, id string) bool        { return id == "cam1" }
 func (fakeProvider) Command(context.Context, string, string, map[string]any) (json.RawMessage, error) {
 	return nil, errNotAllowed
+}
+
+func TestAttachEventPicture(t *testing.T) {
+	e := newTestEvents(t)
+	now := time.Now()
+	e.post(Event{Time: now.Add(-5 * time.Minute), DeviceID: "cam1", Device: "Kitchen", Kind: "person"}, "")
+	e.post(Event{Time: now.Add(-10 * time.Second), DeviceID: "cam1", Device: "Kitchen", Kind: "person"}, "")
+	recent := e.Recent()
+	fresh, old := recent[0], recent[1]
+	jpeg := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, make([]byte, 100)...)
+
+	if _, err := e.Attach(fresh.ID, "cam2", jpeg, now); err == nil {
+		t.Error("picture from another camera accepted")
+	}
+	if _, err := e.Attach(old.ID, "cam1", jpeg, now); err == nil {
+		t.Error("picture for a 5-minute-old event accepted")
+	}
+	ch, stop := e.Subscribe()
+	defer stop()
+	ev, err := e.Attach(fresh.ID, "cam1", jpeg, now)
+	if err != nil || ev.Media == "" {
+		t.Fatalf("attach = %+v, %v", ev, err)
+	}
+	if got := <-ch; got.ID != fresh.ID || got.Media != ev.Media {
+		t.Errorf("broadcast = %+v", got)
+	}
+	if _, err := e.Attach(fresh.ID, "cam1", jpeg, now); err == nil {
+		t.Error("second picture replaced the first")
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.dir, ev.Media)); string(b) != string(jpeg) {
+		t.Error("stored bytes differ")
+	}
+	// The picture survives a restart.
+	e2, _ := newEvents(nil, filepath.Dir(e.dir))
+	if r := e2.Recent(); r[0].Media != ev.Media {
+		t.Errorf("after reload = %+v", r[0])
+	}
 }

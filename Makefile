@@ -28,7 +28,9 @@ deploy: check-host test build
 	ssh $(HOST) 'sed -e "s#__HOME__#$$HOME#g" -e "s#__LISTEN__#$(LISTEN)#g" > ~/Library/LaunchAgents/$(LABEL).plist' < deploy/$(LABEL).plist
 	ssh $(HOST) 'mv ~/bin/hometron.new ~/bin/hometron && \
 	  launchctl bootout gui/`id -u`/$(LABEL) 2>/dev/null; \
-	  launchctl bootstrap gui/`id -u` ~/Library/LaunchAgents/$(LABEL).plist && \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do launchctl print gui/`id -u`/$(LABEL) >/dev/null 2>&1 || break; sleep 1; done; \
+	  for i in 1 2 3 4 5; do launchctl bootstrap gui/`id -u` ~/Library/LaunchAgents/$(LABEL).plist 2>/dev/null && break; sleep 2; done; \
+	  launchctl print gui/`id -u`/$(LABEL) >/dev/null 2>&1 || { echo "launchd would not load $(LABEL)"; exit 1; }; \
 	  for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; curl -fsS http://$(HEALTH)/healthz 2>/dev/null && exit 0; done; \
 	  echo "not healthy after 20s; check make logs"; exit 1'
 

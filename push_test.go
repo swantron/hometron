@@ -182,7 +182,7 @@ func TestSubscribeValidation(t *testing.T) {
 	if err := p.Subscribe(good); err != nil {
 		t.Fatalf("fcm rejected: %v", err)
 	}
-	if s, _ := p.Get(good.Endpoint); len(s.Kinds) != 2 {
+	if s, _ := p.Get(good.Endpoint); len(s.Kinds) != len(defaultAlertKinds) {
 		t.Errorf("default kinds = %v", s.Kinds)
 	}
 	for _, ep := range []string{

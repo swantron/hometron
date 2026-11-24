@@ -34,6 +34,9 @@ type Network struct {
 	seen    map[string]NetHost // mac -> history
 	oui     map[string]string  // "AABBCC" -> vendor
 	running bool
+
+	// OnScan, if set, gets every finished scan (device dropout/newcomer alerts).
+	OnScan func(NetScan)
 }
 
 type NetScan struct {
@@ -110,6 +113,9 @@ func (n *Network) Scan(ctx context.Context) NetScan {
 	b, _ := json.MarshalIndent(n.seen, "", " ")
 	n.mu.Unlock()
 	_ = os.WriteFile(filepath.Join(n.dir, "network-seen.json"), b, 0o600)
+	if n.OnScan != nil {
+		n.OnScan(s)
+	}
 	return s
 }
 

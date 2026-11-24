@@ -24,10 +24,12 @@
   .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); }
   .dot.on { background:var(--ok); } .dot.off { background:var(--bad); }
 
-  main { display:grid; gap:16px; padding:16px; grid-template-columns:1fr; grid-template-areas:"quick" "cams" "feed"; }
-  @media (min-width:1000px) { main { grid-template-columns:2fr 1fr; grid-template-areas:"cams quick" "cams feed"; grid-template-rows:auto 1fr; align-items:start; } }
+  main { display:grid; gap:16px; padding:16px; grid-template-columns:1fr; grid-template-areas:"quick" "glance" "cams" "feed"; }
+  @media (min-width:1000px) { main { grid-template-columns:2fr 1fr; grid-template-areas:"cams quick" "cams glance" "cams feed"; grid-template-rows:auto auto 1fr; align-items:start; } }
   #quick { grid-area:quick; display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); }
   #camsec { grid-area:cams; } #feedsec { grid-area:feed; }
+  #glance { grid-area:glance; display:grid; gap:12px; }
+  #glance:empty { display:none; }
   h2 { font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin:0 0 10px; display:flex; align-items:center; gap:8px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
   .dim { color:var(--dim); font-size:12px; }
@@ -65,6 +67,61 @@
   .sp button { width:44px; height:44px; font-size:20px; padding:0; }
   .modes { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
 
+  .hist { margin-top:12px; }
+  .hist svg { width:100%; height:90px; display:block; }
+  .hist .legend { display:flex; gap:10px; flex-wrap:wrap; font-size:11px; color:var(--dim); margin-top:4px; }
+  .hist .legend i { display:inline-block; width:10px; height:3px; border-radius:2px; vertical-align:middle; margin-right:4px; }
+
+  /* laundry */
+  .laundry { padding:12px 14px; display:flex; align-items:center; gap:12px; }
+  .laundry .glyph { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; font-size:22px; background:#222a33; flex:none; }
+  .laundry.active .glyph { background:#1d3550; } .laundry.done .glyph { background:#173326; }
+  .laundry .state { font-weight:600; } .laundry.done .state { color:var(--ok); } .laundry.active .state { color:var(--accent); }
+  .laundry .grow { flex:1; min-width:0; }
+
+  /* at a glance */
+  .wx { padding:14px; }
+  .wx .top { display:flex; align-items:baseline; gap:10px; }
+  .wx .now { font-size:36px; font-weight:300; line-height:1; }
+  .wx .periods { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:6px; margin-top:12px; }
+  .wx .p { background:#202731; border-radius:8px; padding:6px 8px; font-size:12px; }
+  .wx .p b { display:block; font-size:16px; font-weight:500; }
+  .wx .p.night b { color:var(--cool); }
+  .cal { padding:12px 14px; }
+  .cal .d { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:10px 0 4px; }
+  .cal .d:first-child { margin-top:0; }
+  .cal .e { display:flex; gap:10px; padding:3px 0; font-size:14px; }
+  .cal .e .t { color:var(--dim); width:62px; flex:none; font-size:12px; padding-top:2px; }
+  .cal .e.chore { color:var(--warn); }
+  .cal .e.past { opacity:.45; }
+  .stat { display:flex; gap:8px; flex-wrap:wrap; }
+  .stat .card { padding:10px 12px; flex:1 1 150px; min-width:0; }
+  .stat .k { font-size:12px; color:var(--dim); display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .stat .v { font-weight:600; margin-top:2px; }
+  .stat .v.bad { color:var(--bad); } .stat .v.ok { color:var(--ok); } .stat .v.warn { color:var(--warn); }
+  .stat button { padding:2px 8px; font-size:12px; }
+  .ink { display:flex; gap:6px; margin-top:6px; align-items:flex-end; }
+  .ink .bar { width:16px; height:30px; background:#202731; border:1px solid #3a4350; border-radius:3px; position:relative; overflow:hidden; }
+  .ink .bar span { position:absolute; left:0; right:0; bottom:0; }
+  .setup { font-size:12px; color:var(--dim); }
+  .path { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:6px; font-size:12px; }
+  .path .hop { padding:2px 7px; border-radius:999px; background:#202731; white-space:nowrap; }
+  .path .hop.ok { color:var(--ok); } .path .hop.slow { color:var(--warn); } .path .hop.down { color:var(--bad); background:#3a1f22; }
+  .path .arr { color:var(--dim); }
+  .stat .card.wide { flex-basis:100%; }
+  .stat a { color:var(--accent); text-decoration:none; font-size:12px; }
+  #nethealth { margin-bottom:18px; }
+  .nh-top { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 14px; }
+  .nh-top .big { font-size:18px; font-weight:600; } .nh-top .big.ok { color:var(--ok); } .nh-top .big.bad { color:var(--bad); }
+  .nh-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); margin-top:12px; }
+  .nh-grid .card { padding:12px 14px; }
+  .nh-grid h3 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); font-weight:500; }
+  .nh-chart svg { width:100%; height:120px; display:block; }
+  .kv { display:flex; justify-content:space-between; gap:10px; padding:3px 0; font-size:13px; border-bottom:1px solid var(--line); }
+  .kv:last-child { border-bottom:0; }
+  .kv .dim { font-size:12px; }
+  .warnc { color:var(--warn); } .badc { color:var(--bad); } .okc { color:var(--ok); }
+
   /* cameras */
   .cams { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
   .cam .view { position:relative; aspect-ratio:16/9; background:#000; display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -95,7 +152,7 @@
   .ev .thumb .tag { position:absolute; bottom:3px; right:4px; font-size:10px; background:rgba(0,0,0,.6); padding:0 4px; border-radius:3px; }
   .ev .grow { flex:1; min-width:0; }
   .ev .kind { font-weight:600; }
-  .ev .kind.chime, .ev .kind.opened { color:var(--warn); } .ev .kind.person { color:var(--accent); } .ev .kind.closed { color:var(--ok); }
+  .ev .kind.chime, .ev .kind.opened, .ev .kind.reminder { color:var(--warn); } .ev .kind.done { color:var(--ok); } .ev .kind.person { color:var(--accent); } .ev .kind.closed { color:var(--ok); }
   .ev .when { color:var(--dim); font-size:12px; text-align:right; white-space:nowrap; }
   .empty { color:var(--dim); font-size:13px; padding:10px; }
 
@@ -127,6 +184,7 @@
 <header><h1>hometron</h1><nav><a href="#" data-view="home">Home</a><a href="#network" data-view="network">Network</a></nav><span class="status"><button id="bell" class="icon" title="Doorbell and person alerts on this device">🔕</button><span id="status">loading…</span><span class="dot" id="dot" title="live updates"></span></span></header>
 <main>
   <section id="quick"></section>
+  <section id="glance"></section>
   <section id="camsec"><h2>Cameras <span class="chips"><button id="snapall" title="Grab a fresh still from every camera">📷 Refresh stills</button></span></h2><div class="cams" id="cams"></div></section>
   <section id="feedsec">
     <h2>Activity <span class="chips"><button data-f="key" class="on">Important</button><button data-f="all">All</button></span></h2>
@@ -134,6 +192,8 @@
   </section>
 </main>
 <div id="netview" hidden>
+  <div id="nethealth"></div>
+  <h2>Devices on this network</h2>
   <div class="netbar">
     <div id="netsum" class="dim">Scanning…</div>
     <button id="rescan">Scan again</button>
@@ -212,6 +272,64 @@ function renderQuick() {
     const old = $('.thermo', q), card = thermoCard(thermo);
     old ? old.replaceWith(card) : q.append(card);
   }
+  for (const f of devices.filter(d => d.kind === 'fridge')) {
+    const old = $(`[data-id="${CSS.escape(f.id)}"]`, q), card = fridgeCard(f);
+    old ? old.replaceWith(card) : q.append(card);
+  }
+  for (const l of devices.filter(d => d.kind === 'laundry').sort((a, b) => b.room.localeCompare(a.room))) {
+    const old = $(`[data-id="${CSS.escape(l.id)}"]`, q), card = laundryCard(l);
+    old ? old.replaceWith(card) : q.append(card);
+  }
+}
+
+function fridgeCard(f) {
+  if (f.run === 'signin' || f.run === 'signing-in') return h('div', { class: 'card laundry', 'data-id': f.id },
+    h('div', { class: 'glyph' }, '🧊'),
+    h('div', { class: 'grow' }, h('div', { class: 'state', style: 'color:var(--warn)' }, f.run === 'signin' ? 'SmartThings sign-in expired' : 'Waiting for sign-in'),
+      h('div', { class: 'dim' }, f.run === 'signin' ? 'Opens Chrome on the server’s screen. Sign in there over Screen Sharing; hometron does the rest.' : f.problem)),
+    f.run === 'signin' ? h('button', { onclick: async e => {
+      e.target.disabled = true;
+      try { await postJSON('/api/smartthings/signin', {}); toastOK('Chrome is open on the server: connect with Screen Sharing to sign in.'); }
+      catch (err) { toast(err.message); }
+      loadDevices();
+    } }, 'Sign in') : null);
+  if (f.run === 'connect') return h('div', { class: 'card laundry', 'data-id': f.id },
+    h('div', { class: 'glyph' }, '🧊'),
+    h('div', { class: 'grow' }, h('div', { class: 'state' }, 'Fridge'), h('div', { class: 'dim' }, 'Sign in to SmartThings once to connect it')),
+    h('a', { href: '/smartthings/connect' }, h('button', {}, 'Connect')));
+  const open = (f.parts || []).filter(p => p.open);
+  const temps = (f.parts || []).filter(p => p.tempF != null).map(p => `${p.name} ${Math.round(p.tempF)}°`).join(' · ');
+  const drawer = (f.parts || []).find(p => p.mode);
+  const extra = [drawer ? `drawer: ${drawer.mode}` : '', f.ice || '', f.filterPc != null ? `water filter ${f.filterPc}% used` : '',
+    f.kwhMonth != null ? `${f.kwhMonth} kWh this month` + (f.kwhLast != null ? ` (${f.kwhLast} last)` : '') : '', ...(f.notes || [])].filter(Boolean).join(' · ');
+  return h('div', { class: 'card laundry' + (open.length ? ' active' : ''), 'data-id': f.id },
+    h('div', { class: 'glyph' }, '🧊'),
+    h('div', { class: 'grow' },
+      h('div', {}, h('span', { class: 'state', style: open.length ? 'color:var(--warn)' : '' },
+        open.length ? open.map(p => `${p.name} door open${p.openMin ? ' ' + p.openMin + 'm' : ''}`).join(', ') : temps || f.label)),
+      h('div', { class: 'dim' }, open.length ? temps : f.label, extra ? ' · ' + extra : '', f.online === false && !f.problem ? ' · not reporting' : ''),
+      f.problem ? h('div', { class: 'dim', style: 'color:var(--bad)' }, f.problem) : null,
+      f.run === 'needs-signin' ? h('div', { class: 'dim', style: 'color:var(--warn);margin-top:4px' }, 'Token renewal needs a SmartThings sign-in on the server. ',
+        h('a', { href: '#', style: 'color:var(--accent)', onclick: async e => {
+          e.preventDefault();
+          try { await postJSON('/api/smartthings/signin', {}); toastOK('Chrome is open on the server: connect with Screen Sharing to sign in.'); }
+          catch (err) { toast(err.message); }
+          loadDevices();
+        } }, 'Sign in')) : null));
+}
+
+function laundryCard(l) {
+  const done = l.run === 'Done' || l.run.startsWith('Done');
+  const left = l.remainMin != null ? (l.remainMin >= 60 ? `${Math.floor(l.remainMin / 60)}h ${l.remainMin % 60}m left` : `${l.remainMin} min left`) : '';
+  const finished = lastEvent(l.id, ['done']);
+  return h('div', { class: 'card laundry' + (l.active ? ' active' : '') + (done ? ' done' : ''), 'data-id': l.id },
+    h('div', { class: 'glyph' }, l.room === 'dryer' ? '♨️' : '🧺'),
+    h('div', { class: 'grow' },
+      h('div', {}, h('span', { class: 'state' }, l.run), left ? h('span', { class: 'dim' }, ' · ' + left) : null),
+      h('div', { class: 'dim' }, l.label,
+        !l.active && finished ? ` · finished ${ago(finished.time)}` : '',
+        l.online ? '' : ' · not reporting'),
+      l.problem ? h('div', { class: 'problem dim', style: 'color:var(--bad)' }, l.problem) : null));
 }
 
 function lastEvent(deviceId, kinds) {
@@ -313,7 +431,61 @@ function thermoCard(t) {
     (t.mode === 'COOL' || t.mode === 'HEATCOOL') ? row('cool', 'cool to', t.coolF, 'cool') : null,
     h('div', { class: 'modes' },
       (t.modes || []).map(m => h('button', { class: m === t.mode && !eco ? 'on' : null, onclick: () => setMode(t, m) }, m === 'HEATCOOL' ? 'Heat·Cool' : m[0] + m.slice(1).toLowerCase())),
-      h('button', { class: eco ? 'on' : null, onclick: () => setEco(t, !eco) }, 'Eco')));
+      h('button', { class: eco ? 'on' : null, onclick: () => setEco(t, !eco) }, 'Eco')),
+    thermoHistory());
+}
+
+// 24 hours of indoor temperature, setpoint and outside, with heating/cooling shaded.
+function thermoHistory() {
+  const th = homeData?.thermostat;
+  if (!th || th.samples.length < 2) return th ? h('div', { class: 'hist dim' }, 'History starts building now: check back in an hour.') : null;
+  const S = th.samples, W = 300, H = 90, pad = 2;
+  const t0 = Date.now() - 24 * 3600e3, t1 = Date.now();
+  // Scale to inside and setpoints; in a Montana winter the outside line would flatten them.
+  const vals = S.flatMap(s => [s.in, s.mode === 'HEAT' || s.mode === 'HEATCOOL' ? s.heat : null, s.mode === 'COOL' || s.mode === 'HEATCOOL' ? s.cool : null]).filter(v => v != null);
+  let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+  if (hi - lo < 8) { const m = (hi + lo) / 2; lo = m - 4; hi = m + 4; }
+  const outs = S.map(s => s.out).filter(v => v != null);
+  const outInRange = outs.length && Math.min(...outs) >= lo - 2 && Math.max(...outs) <= hi + 2;
+  const x = t => pad + (W - 2 * pad) * (Math.max(t0, new Date(t)) - t0) / (t1 - t0);
+  const y = v => pad + (H - 2 * pad) * (1 - (v - lo) / (hi - lo));
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = (tag, a) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Temperature over the last 24 hours' });
+  // Heating/cooling spans: each sample's status lasts until the next.
+  S.forEach((s, i) => {
+    if (s.hvac !== 'HEATING' && s.hvac !== 'COOLING') return;
+    const a = x(s.t), b = x(i + 1 < S.length ? S[i + 1].t : t1);
+    if (b > a) svg.append(el('rect', { x: a, y: 0, width: b - a, height: H, fill: s.hvac === 'HEATING' ? 'rgba(255,122,89,.18)' : 'rgba(89,182,255,.18)' }));
+  });
+  const line = (key, color, dash, ok = () => true) => {
+    let d = '', prev = null;
+    S.forEach((s, i) => {
+      const v = ok(s) ? s[key] : null;
+      if (v == null) { prev = null; return; }
+      const X = x(s.t), Y = y(v);
+      d += prev == null ? `M${X},${Y}` : `H${X}V${Y}`; // step: a reading holds until the next
+      prev = v;
+      if (i === S.length - 1) d += `H${x(t1)}`;
+    });
+    if (d) svg.append(el('path', { d, fill: 'none', stroke: color, 'stroke-width': key === 'in' ? 2 : 1.3, 'stroke-dasharray': dash || '', 'vector-effect': 'non-scaling-stroke' }));
+  };
+  if (outInRange) line('out', '#8b95a3', '2 3');
+  line('heat', '#ff7a59', '4 3', s => s.mode === 'HEAT' || s.mode === 'HEATCOOL');
+  line('cool', '#59b6ff', '4 3', s => s.mode === 'COOL' || s.mode === 'HEATCOOL');
+  line('in', '#e6e9ee');
+  const run = (m, what) => m ? `${what} ran ${m >= 60 ? Math.floor(m / 60) + 'h ' : ''}${m % 60}m` : '';
+  const today = [run(th.heatTodayMin, 'Heat'), run(th.coolTodayMin, 'AC')].filter(Boolean).join(' · ') || 'Heat hasn\'t run';
+  const yest = [run(th.heatYesterdayMin, 'heat'), run(th.coolYesterdayMin, 'AC')].filter(Boolean).join(', ');
+  const outText = outs.length && !outInRange ? `outside ${Math.round(Math.min(...outs))}°–${Math.round(Math.max(...outs))}°` : null;
+  return h('div', { class: 'hist' },
+    h('div', { class: 'dim', style: 'display:flex;justify-content:space-between' }, h('span', {}, 'Last 24 h'), h('span', {}, `${lo}° – ${hi}°`)),
+    svg,
+    h('div', { class: 'legend' },
+      h('span', {}, h('i', { style: 'background:#e6e9ee' }), 'inside'),
+      h('span', {}, h('i', { style: 'background:#ff7a59' }), 'set to'),
+      outInRange ? h('span', {}, h('i', { style: 'background:#8b95a3' }), 'outside') : outText ? h('span', {}, outText) : null,
+      h('span', { style: 'margin-left:auto' }, today + ' today' + (yest ? ` · yesterday ${yest}` : ''))));
 }
 
 let nudgeTimer, pending = null;
@@ -346,6 +518,310 @@ async function setMode(t, mode) {
 async function setEco(t, on) {
   try { await command(t.id, 'sdm.devices.commands.ThermostatEco.SetMode', { mode: on ? 'MANUAL_ECO' : 'OFF' }); } catch (e) { toast(e.message); }
   setTimeout(loadDevices, 1500);
+}
+
+// ---------- at a glance: weather, calendar, internet, printer, chime ----------
+let homeData = null;
+async function loadHome() {
+  try {
+    const r = await fetch('/api/home');
+    if (!r.ok) return;
+    homeData = await r.json();
+  } catch { return; }
+  renderGlance();
+  if (!pending) { const t = devices.find(d => d.kind === 'thermostat'); const old = $('.thermo'); if (t && old) old.replaceWith(thermoCard(t)); }
+}
+
+function renderGlance() {
+  const g = $('#glance'), d = homeData;
+  if (!d) return;
+  const kids = [];
+  if (d.weather) kids.push(weatherCard(d.weather));
+  if (d.calendar) kids.push(calendarCard(d.calendar));
+  kids.push(statusRow(d));
+  if (d.setup?.length) kids.push(h('div', { class: 'setup' }, 'Not set up yet: ' + d.setup.join(', ') + ' (see README)'));
+  g.replaceChildren(...kids);
+}
+
+function weatherCard(w) {
+  const now = w.now || {};
+  return h('div', { class: 'card wx' },
+    h('div', { class: 'top' },
+      h('div', { class: 'now' }, now.tempF != null ? Math.round(now.tempF) + '°' : '—'),
+      h('div', {},
+        h('div', {}, now.text || (w.periods?.[0]?.text ?? '')),
+        h('div', { class: 'dim' }, 'Outside', w.city ? ' · ' + w.city : '', now.windMph ? ` · wind ${now.windMph} mph` : '', w.error ? ' · stale' : ''))),
+    w.periods?.length ? h('div', { class: 'periods' }, w.periods.slice(0, 4).map(p =>
+      h('div', { class: 'p' + (p.day ? '' : ' night') },
+        h('div', { class: 'dim' }, p.name.replace('This ', '').replace('Afternoon', 'Today')),
+        h('b', {}, Math.round(p.tempF) + '°'),
+        h('div', { class: 'dim', title: p.text }, shortSky(p.text) + (p.precip ? ` · ${p.precip}%` : ''))))) : null);
+}
+const shortSky = t => t.length > 18 ? t.split(/ then |,| and /i)[0].slice(0, 18) : t;
+
+function calendarCard(c) {
+  const rows = []; let day = null;
+  const now = Date.now();
+  for (const e of c.events.slice(0, 14)) {
+    const d = calDay(e.start);
+    if (d !== day) { rows.push(h('div', { class: 'd' }, d)); day = d; }
+    rows.push(h('div', { class: 'e' + (e.chore ? ' chore' : '') + (!e.allDay && new Date(e.end) < now ? ' past' : '') },
+      h('div', { class: 't' }, e.allDay ? (e.chore ? '🗑️' : 'all day') : clock(e.start)),
+      h('div', {}, e.title, e.location ? h('div', { class: 'dim' }, e.location.split('\n')[0]) : null)));
+  }
+  if (!rows.length) rows.push(h('div', { class: 'dim' }, 'Nothing on the calendar this week.'));
+  if (c.errors?.length) rows.push(h('div', { class: 'dim', style: 'color:var(--bad);margin-top:8px' }, 'Couldn’t refresh: ' + c.errors.join('; ')));
+  return h('div', { class: 'card cal' }, ...rows);
+}
+// calDay labels upcoming days: Today, Tomorrow, then "Thursday, Nov 26". Something that
+// started earlier and is still going counts as today.
+const calDay = t => {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((new Date(t).setHours(0, 0, 0, 0) - today) / 864e5);
+  return diff <= 0 ? 'Today' : diff === 1 ? 'Tomorrow' : new Date(t).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+};
+
+function statusRow(d) {
+  const cards = [];
+  if (d.net || d.internet) cards.push(networkCard(d.net, d.internet));
+  const p = d.printer;
+  if (p) {
+    // The printer decides when ink is "low"; name the emptiest ones when it says so.
+    const warn = (p.reasons || []).some(r => /marker-supply-(low|empty)/.test(r));
+    const known = (p.markers || []).filter(m => m.level >= 0);
+    const floor = Math.min(...known.map(m => m.level));
+    const low = known.filter(m => m.level <= 10 || (warn && m.level <= floor + 5));
+    const cls = p.state === 'offline' || p.state === 'stopped' ? 'bad' : low.length ? 'warn' : 'ok';
+    const word = p.state === 'offline' ? 'Offline' : p.state === 'stopped' ? 'Needs attention' : p.state === 'printing' ? 'Printing' : low.length ? low.map(m => inkName(m.name)).join(', ') + ' low' : 'Ready';
+    cards.push(h('div', { class: 'card', title: [p.name, ...(p.reasons || [])].join('\n') },
+      h('div', { class: 'k' }, '🖨️ Printer'),
+      h('div', { class: 'v ' + cls }, word),
+      p.markers?.length ? h('div', { class: 'ink' }, p.markers.map(m => h('div', { class: 'bar', title: `${m.name}: ${m.level >= 0 ? m.level + '%' : 'level unknown'}` },
+        h('span', { style: `height:${m.level >= 0 ? Math.max(4, m.level) : 50}%;background:${m.color || '#8b95a3'};${m.level < 0 ? 'opacity:.35' : ''}` })))) : null));
+  }
+  if (d.chime) {
+    cards.push(h('div', { class: 'card' },
+      h('div', { class: 'k' }, '🔔 Doorbell chime', h('button', { onclick: testChime, title: 'Play the chime on the speakers now' }, 'Test')),
+      h('div', { class: 'v ok' }, 'On'),
+      h('div', { class: 'dim' }, 'Speakers ring when the doorbell is pressed')));
+  }
+  return h('div', { class: 'stat' }, cards);
+}
+const inkName = n => n.replace(/ (cartridge|ink|toner)s?$/i, '').toLowerCase();
+const durMin = (a, b) => { const m = Math.round((new Date(b) - new Date(a)) / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
+
+// ---------- network health ----------
+const HOPS = [['wifi', 'Wi-Fi'], ['router', 'Router'], ['isp', 'ISP'], ['internet', 'Internet']];
+function hopClass(x) { return !x ? '' : x.loss >= 100 ? 'down' : (x.loss >= 20 || x.ms > 150) ? 'slow' : 'ok'; }
+function pathRow(now) {
+  if (!now) return null;
+  const parts = [];
+  for (const [k, name] of HOPS) {
+    const x = now[k]; if (!x) continue;
+    if (parts.length) parts.push(h('span', { class: 'arr' }, '→'));
+    parts.push(h('span', { class: 'hop ' + hopClass(x), title: `${x.host || ''} · ${x.loss}% loss` + (x.jitter ? ` · ±${x.jitter} ms` : '') },
+      name + ' ' + (x.loss >= 100 ? '✕' : Math.round(x.ms) + ' ms')));
+  }
+  for (const p of now.points || []) parts.push(h('span', { class: 'hop ' + hopClass(p), title: `Mesh point ${p.host} · ${p.loss}% loss` }, '📶 ' + p.name + ' ' + (p.loss >= 100 ? '✕' : Math.round(p.ms) + ' ms')));
+  if (now.dns !== undefined) parts.push(h('span', { class: 'hop ' + (now.dns < 0 ? 'down' : now.dns > 300 ? 'slow' : 'ok'), title: 'Name lookups through the house DNS' }, 'DNS ' + (now.dns < 0 ? '✕' : now.dns + ' ms')));
+  return h('div', { class: 'path' }, parts);
+}
+const pct = v => v >= 99.995 ? '100%' : v.toFixed(v >= 99.9 ? 2 : 1) + '%';
+const speedLine = sp => sp ? `${Math.round(sp.down)}↓` + (sp.up ? ` ${Math.round(sp.up)}↑` : '') + ` Mbps · ${sp.by || 'a browser'} · ${ago(sp.at)}` : null;
+
+function networkCard(n, net) {
+  const ok = n ? n.ok && (!net || net.up) : net?.up;
+  const words = net && !net.up ? 'Internet down since ' + clock(net.since) : n ? n.words : 'Up';
+  const rep = net?.report;
+  return h('div', { class: 'card wide' },
+    h('div', { class: 'k' }, '🌐 Network',
+      h('span', {}, h('button', { onclick: speedTest, title: 'Measure download and upload from this device (about 35 MB)' }, 'Speed test'), ' ', h('a', { href: '#network' }, 'Details →'))),
+    h('div', { class: 'v ' + (ok ? 'ok' : 'bad') }, words),
+    pathRow(n?.now),
+    h('div', { class: 'dim', style: 'margin-top:6px' }, [
+      rep ? `${pct(rep.up30)} up` + (rep.outages30 ? ` · ${rep.outages30} outage${rep.outages30 > 1 ? 's' : ''} (${rep.downMin30}m)` : '') + (new Date(rep.since) > Date.now() - 30 * 864e5 ? ` since ${new Date(rep.since).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ' in 30 days') : '',
+      speedLine(net?.speeds?.[0]) || 'no speed test yet',
+    ].filter(Boolean).join(' · ')));
+}
+
+// speedTest runs in this browser against Cloudflare's public test endpoints: the server's
+// own Wi-Fi is too weak to measure the internet, but the device you're holding isn't.
+async function speedTest(e) {
+  const b = e.target; b.disabled = true;
+  const base = 'https://speed.cloudflare.com';
+  const timed = async (fn) => { const t = performance.now(); await fn(); return (performance.now() - t) / 1000; };
+  try {
+    b.textContent = 'ping…';
+    const pings = [];
+    for (let i = 0; i < 5; i++) pings.push(await timed(() => fetch(`${base}/__down?bytes=0`, { cache: 'no-store' }).then(r => r.arrayBuffer())));
+    const pingMs = Math.round(Math.min(...pings) * 1000);
+    b.textContent = 'download…';
+    const downBytes = 25e6;
+    await fetch(`${base}/__down?bytes=1000000`, { cache: 'no-store' }).then(r => r.arrayBuffer()); // warm up the connection
+    const dt = await timed(() => fetch(`${base}/__down?bytes=${downBytes}`, { cache: 'no-store' }).then(r => r.arrayBuffer()));
+    b.textContent = 'upload…';
+    const upBytes = 10e6, blob = new Blob([new Uint8Array(upBytes)]);
+    const ut = await timed(() => fetch(`${base}/__up`, { method: 'POST', body: blob, cache: 'no-store' }).then(r => r.text()));
+    const res = { down: downBytes * 8 / dt / 1e6, up: upBytes * 8 / ut / 1e6, pingMs };
+    await postJSON('/api/internet/speed', res);
+    toastOK(`${Math.round(res.down)} Mbps down · ${Math.round(res.up)} up · ${pingMs} ms`);
+  } catch (err) { toast('Speed test failed: ' + err.message); }
+  b.disabled = false; b.textContent = 'Speed test';
+  loadHome(); if (location.hash === '#network') loadHealth();
+}
+function toastOK(msg) { toast(msg); $('#toast').style.borderColor = 'var(--ok)'; $('#toast').style.background = '#173326'; $('#toast').style.color = '#d7ffe6'; setTimeout(() => $('#toast').removeAttribute('style'), 6100); }
+
+async function loadHealth() {
+  try {
+    const r = await fetch('/api/network/health');
+    if (r.ok) renderHealth(await r.json());
+  } catch {}
+}
+
+function renderHealth({ net: n, internet: net }) {
+  const box = $('#nethealth');
+  if (!n && !net) { box.replaceChildren(); return; }
+  const ok = (n ? n.ok : true) && (!net || net.up);
+  const words = net && !net.up ? 'Internet down since ' + clock(net.since) : n?.words || '';
+  const top = h('div', { class: 'card nh-top' },
+    h('div', { class: 'big ' + (ok ? 'ok' : 'bad') }, ok ? '✓ ' + words : '✕ ' + words),
+    pathRow(n?.now),
+    h('span', { style: 'margin-left:auto' }, h('button', { onclick: speedTest }, 'Speed test from this device')));
+
+  const cards = [];
+  if (n?.samples?.length > 1) cards.push(h('div', { class: 'card nh-chart' }, h('h3', {}, 'Last 24 hours'), netChart(n.samples, net?.outages || []),
+    h('div', { class: 'hist' }, h('div', { class: 'legend' },
+      h('span', {}, h('i', { style: 'background:#5aa9ff' }), 'internet response'),
+      h('span', {}, h('i', { style: 'background:#8b95a3' }), 'Wi-Fi hop'),
+      h('span', {}, h('i', { style: 'background:#ff6b6b' }), 'packet loss / outage')))));
+
+  if (net?.report) {
+    const r = net.report;
+    cards.push(h('div', { class: 'card' }, h('h3', {}, 'Uptime'),
+      kv('Last 7 days', pct(r.up7)), kv('Last 30 days', pct(r.up30)),
+      kv('Outages (30 days)', r.outages30 ? `${r.outages30} · ${r.downMin30} min total` : 'none'),
+      kv('Watching since', new Date(r.since).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })),
+      ...(net.outages || []).slice(0, 6).map(o => kv(new Date(o.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }), durMin(o.start, o.end), 'badc'))));
+  }
+  cards.push(h('div', { class: 'card' }, h('h3', {}, 'Speed tests'),
+    ...(net?.speeds?.length ? net.speeds.map(sp => kv(`${Math.round(sp.down)}↓ ${sp.up ? Math.round(sp.up) + '↑' : ''} Mbps`, `${sp.by || ''} · ${ago(sp.at)}${sp.pingMs ? ' · ' + sp.pingMs + ' ms' : ''}`))
+      : [h('div', { class: 'dim' }, 'None yet. Run one from a laptop or phone with good Wi-Fi: the result is that device’s speed, which is the best measure of the internet we have.')])));
+
+  if (n?.routers?.length) cards.push(h('div', { class: 'card' }, h('h3', {}, 'Wi-Fi mesh'), ...n.routers.map(r => unitBlock(r, n.samples || []))));
+  if (n?.tailscale?.length) cards.push(h('div', { class: 'card' }, h('h3', {}, 'Tailscale'),
+    ...n.tailscale.map(t => {
+      const days = t.keyExpiry ? Math.floor((new Date(t.keyExpiry) - Date.now()) / 864e5) : null;
+      const exp = days == null ? 'key never expires' : days < 0 ? 'KEY EXPIRED' : `key expires in ${days} d`;
+      return kv(`${t.name}${t.self ? ' (this server)' : ''}`,
+        `${t.online ? 'online' : t.lastSeen ? 'seen ' + ago(t.lastSeen) : 'offline'} · ${exp}`,
+        days != null && days < 21 ? (days < 7 ? 'badc' : 'warnc') : '');
+    })));
+
+  if (n?.link) {
+    const l = n.link;
+    const weak = !l.wired && (l.signal <= -70 || l.rateMbps < 50);
+    cards.push(h('div', { class: 'card' }, h('h3', {}, 'This server’s connection'),
+      l.wired ? kv('Link', 'wired') : kv('Wi-Fi', `${l.band || ''} · ${l.signal} dBm · ${l.rateMbps} Mbps link`, weak ? 'warnc' : ''),
+      weak ? h('div', { class: 'dim', style: 'margin-top:6px' }, 'Weak link: fine for watching the network, which is why speed tests run on your device instead.') : null));
+  }
+  const recent = events.filter(e => e.kind === 'network' || e.kind === 'internet').slice(0, 8);
+  if (recent.length) cards.push(h('div', { class: 'card' }, h('h3', {}, 'Recent changes'), ...recent.map(e => kv(e.device, ago(e.time)))));
+  box.replaceChildren(top, h('div', { class: 'nh-grid' }, cards));
+}
+// unitBlock: one Google/Nest Wifi unit. Points get a 24-hour answered/missed strip and
+// their drop log, since a flaky point takes everything near it offline.
+function unitBlock(r, samples) {
+  const restartedAt = Date.now() - r.uptimeSec * 1000;
+  const recent = r.uptimeSec < 2 * 86400;
+  const kids = [
+    h('div', { class: 'kv' },
+      h('span', {}, h('b', {}, r.name), r.root ? ' (main)' : ''),
+      h('span', { class: 'dim ' + (r.ping && r.ping.loss >= 100 ? 'badc' : r.root && r.online === false ? 'badc' : '') },
+        r.ping ? (r.ping.loss >= 100 ? 'not answering' : Math.round(r.ping.ms) + ' ms' + (r.ping.loss ? ` · ${r.ping.loss}% loss` : '')) : r.root ? (r.online === false ? 'no internet' : 'online') : '')),
+    kv(recent ? 'Restarted' : 'Up for', recent ? new Date(restartedAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ` (${upFor(r.uptimeSec)} ago)` : upFor(r.uptimeSec),
+      recent && !r.root ? 'warnc' : ''),
+  ];
+  if (r.led && r.led !== 'CONNECTED') kids.push(kv('Light', r.led.toLowerCase().replace(/_/g, ' '), 'warnc'));
+  if (!r.root) {
+    if (r.avail24 != null) kids.push(kv('Reachable', `${pct(r.avail24)} today` + (r.avail7 != null ? ` · ${pct(r.avail7)} week` : '') + ` · ${r.drops7 || 0} drop${r.drops7 === 1 ? '' : 's'}`, r.avail24 < 99 ? 'warnc' : ''));
+    const strip = meshStrip(r.ip, samples);
+    if (strip) kids.push(strip);
+    for (const d of (r.drops || []).slice(0, 5)) kids.push(kv(
+      new Date(d.start).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+      `${durMin(d.start, d.end)}${d.restarted ? ' · restarted' : ' · lost link'}${d.outF != null ? ` · ${Math.round(d.outF)}° out` : ''}`, 'badc'));
+    const cold = (r.drops || []).filter(d => d.outF != null && d.outF < 32).length;
+    if (cold >= 2 && cold >= (r.drops || []).length / 2) kids.push(h('div', { class: 'dim', style: 'margin-top:6px' },
+      `${cold} of the recent drops happened below freezing outside. Google rates these units for roughly 32–95°F, so if this point is in an unheated garage, the cold is a likely cause.`));
+  }
+  if (r.updating) kids.push(kv('Firmware', 'updating now', 'warnc'));
+  else kids.push(kv('Firmware', r.firmware));
+  return h('div', { style: 'margin-bottom:10px' }, kids);
+}
+
+// meshStrip: one tick per sampled minute over 24 h, green answered / red missed.
+function meshStrip(ip, samples) {
+  const pts = samples.map(s => ({ t: new Date(s.t).getTime(), p: (s.points || []).find(p => p.host === ip) })).filter(x => x.p);
+  if (pts.length < 2) return null;
+  const W = 600, H = 14, t1 = Date.now(), t0 = t1 - 24 * 3600e3;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('style', 'width:100%;height:14px;display:block;margin:4px 0;border-radius:3px;background:#202731');
+  svg.setAttribute('aria-label', 'Reachable over the last 24 hours');
+  for (const { t, p } of pts) {
+    const r = document.createElementNS(ns, 'rect');
+    const x = (Math.max(t0, t) - t0) / (t1 - t0) * W;
+    r.setAttribute('x', x); r.setAttribute('y', 0); r.setAttribute('width', Math.max(0.8, W / (24 * 60))); r.setAttribute('height', H);
+    r.setAttribute('fill', p.loss >= 100 ? '#ff6b6b' : p.loss > 0 ? '#ffb454' : '#46c47e');
+    svg.append(r);
+  }
+  return svg;
+}
+
+function kv(k, v, cls) { return h('div', { class: 'kv' }, h('span', {}, k), h('span', { class: 'dim ' + (cls || '') }, v)); }
+const upFor = s => s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.floor(s / 60) + 'm';
+
+// netChart: internet round-trip over 24 h, the Wi-Fi hop under it, loss as red ticks
+// along the bottom and outages as red bands.
+function netChart(S, outages) {
+  const W = 600, H = 120, t1 = Date.now(), t0 = t1 - 24 * 3600e3;
+  const vals = S.flatMap(s => [s.internet?.loss < 100 ? s.internet.ms : null, s.wifi?.loss < 100 ? s.wifi.ms : null]).filter(v => v != null).sort((a, b) => a - b);
+  const hi = Math.max(50, vals.length ? vals[Math.floor(vals.length * 0.98)] * 1.2 : 100); // ignore the odd spike
+  const x = t => (Math.max(t0, new Date(t)) - t0) / (t1 - t0) * W;
+  const y = v => H - 8 - (H - 12) * Math.min(1, v / hi);
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = (tag, a) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Internet response time over 24 hours' });
+  for (const o of outages) if (new Date(o.end) > t0) svg.append(el('rect', { x: x(o.start), y: 0, width: Math.max(2, x(o.end) - x(o.start)), height: H, fill: 'rgba(255,107,107,.25)' }));
+  for (const g of [0.25, 0.5, 0.75]) svg.append(el('line', { x1: 0, x2: W, y1: y(hi * g), y2: y(hi * g), stroke: '#2a313b', 'vector-effect': 'non-scaling-stroke' }));
+  const line = (key, color, wdt) => {
+    let d = '', gap = true, prevT = 0;
+    for (const s of S) {
+      const v = s[key];
+      const t = new Date(s.t).getTime();
+      if (!v || v.loss >= 100 || t - prevT > 5 * 60e3) gap = true; // missing minutes break the line
+      prevT = t;
+      if (!v || v.loss >= 100) continue;
+      d += (gap ? 'M' : 'L') + x(s.t).toFixed(1) + ',' + y(v.ms).toFixed(1);
+      gap = false;
+    }
+    if (d) svg.append(el('path', { d, fill: 'none', stroke: color, 'stroke-width': wdt, 'vector-effect': 'non-scaling-stroke' }));
+  };
+  line('wifi', '#8b95a3', 1);
+  line('internet', '#5aa9ff', 1.6);
+  for (const s of S) {
+    const l = s.internet?.loss || 0;
+    if (l > 0) svg.append(el('rect', { x: x(s.t) - 1, y: H - 6, width: 2.5, height: 6, fill: l >= 100 ? '#ff6b6b' : 'rgba(255,107,107,.6)' }));
+  }
+  const lab = el('text', { x: 4, y: 12, fill: '#8b95a3', 'font-size': 10 }); lab.textContent = Math.round(hi) + ' ms';
+  svg.append(lab);
+  return svg;
+}
+
+async function testChime(e) {
+  e.target.disabled = true; e.target.textContent = 'ringing…';
+  try { await postJSON('/api/chime/test', {}); } catch (err) { toast('Chime failed: ' + err.message); }
+  e.target.disabled = false; e.target.textContent = 'Test';
 }
 
 // ---------- cameras ----------
@@ -453,18 +929,32 @@ function stillFor(id) {
   return fromSnap || fromEv || null;
 }
 
-// grab draws the current live frame to a canvas and uploads it as the camera's still.
-function grab(id) {
+// isBlack: a stream's first frames (and a camera switched off) decode as solid black.
+// Night vision is dim but never this flat, so these are safe to throw away.
+function isBlack(c) {
+  const t = document.createElement('canvas'); t.width = 32; t.height = 18;
+  const x = t.getContext('2d'); x.drawImage(c, 0, 0, 32, 18);
+  const d = x.getImageData(0, 0, 32, 18).data;
+  let max = 0, sum = 0;
+  for (let i = 0; i < d.length; i += 4) { const l = (d[i] * 3 + d[i + 1] * 6 + d[i + 2]) / 10; sum += l; if (l > max) max = l; }
+  return max < 24 && sum / (d.length / 4) < 8;
+}
+
+// grab draws the current live frame to a canvas and uploads it as the camera's still,
+// and as the picture for eventId when given.
+function grab(id, eventId) {
   const v = streams[id]?.video;
   if (!v || !v.videoWidth) return Promise.resolve(false);
   const c = document.createElement('canvas');
   const scale = Math.min(1, 1280 / v.videoWidth);
   c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
   c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  if (isBlack(c)) return Promise.resolve(false);
+  const q = eventId ? '?event=' + encodeURIComponent(eventId) : '';
   return new Promise(resolve => c.toBlob(async blob => {
     if (!blob) return resolve(false);
     try {
-      const r = await fetch(`/api/devices/${encodeURIComponent(id)}/snapshot`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+      const r = await fetch(`/api/devices/${encodeURIComponent(id)}/snapshot${q}`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
       if (r.ok) { snaps[id] = await r.json(); refreshStills(id); }
       resolve(r.ok);
     } catch { resolve(false); }
@@ -477,20 +967,49 @@ function refreshStills(id) {
 }
 
 // snapOnce opens a stream just long enough to get a frame, then hangs up.
-async function snapOnce(id) {
-  if (streams[id]) return grab(id);
+// With eventId the frame also becomes that event's picture, and failures stay quiet.
+const snapping = new Set();
+async function snapOnce(id, eventId) {
+  if (streams[id]) return grabUntil(id, eventId, 4);
+  if (snapping.has(id)) return false;
+  snapping.add(id);
   const card = $(`[data-id="${CSS.escape(id)}"].cam`);
   card?.classList.add('busy');
+  let ok = false;
   try {
     await startLive(id);
     for (let i = 0; i < 30 && streams[id] && !streams[id].video.videoWidth; i++) await new Promise(r => setTimeout(r, 500));
     await new Promise(r => setTimeout(r, 1500)); // let exposure settle after the first frame
-    if (!(await grab(id))) toast('Could not get a still from that camera.');
+    ok = await grabUntil(id, eventId, 6);
+    if (!ok && !eventId) toast('No picture from that camera: the frame was black (is the camera switched off?).');
     if (streams[id]) streams[id].noFinalGrab = true;
   } finally {
     stopLive(id);
     card?.classList.remove('busy');
+    snapping.delete(id);
   }
+  return ok;
+}
+
+// grabUntil retries while the stream is still showing black, a second apart.
+async function grabUntil(id, eventId, tries) {
+  for (let i = 0; i < tries && streams[id]; i++) {
+    if (await grab(id, eventId)) return true;
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+// A person on a camera Google won't give pictures for: if this tab is open and looking,
+// grab one from the live stream while they're probably still in frame.
+const pictured = new Set();
+function pictureFor(ev) {
+  if (ev.media || !['person', 'chime'].includes(ev.kind) || pictured.has(ev.id) || document.hidden) return;
+  const dev = devices.find(d => d.id === ev.deviceId);
+  if (!dev || dev.kind !== 'camera') return; // the doorbell sends its own clip
+  if (Date.now() - new Date(ev.time) > 60 * 1000) return;
+  pictured.add(ev.id);
+  snapOnce(ev.deviceId, ev.id);
 }
 
 function openLiveFromCard(id) {
@@ -512,15 +1031,15 @@ function fullscreen(id) {
 addEventListener('pagehide', () => Object.keys(streams).forEach(stopLive));
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) Object.keys(streams).forEach(stopLive);
-  else { loadDevices(); reloadEvents(); }
+  else { loadDevices(); reloadEvents(); loadHome(); }
 });
 
 // ---------- activity ----------
 let events = []; // newest first
 let filter = localStorage.getItem('feedFilter') || 'key';
-const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed']);
-const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼' };
-const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed' })[ev.kind] || ev.kind;
+const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed', 'done', 'reminder', 'internet', 'network', 'fridge']);
+const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼', done: '🧺', reminder: '🗑️', internet: '🌐', network: '📡', fridge: '🧊' };
+const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed', done: 'Laundry done', reminder: 'Reminder', internet: 'Internet', network: 'Network', fridge: 'Fridge' })[ev.kind] || ev.kind;
 
 function upsertEvent(ev) {
   events = [ev, ...events.filter(e => e.id !== ev.id)].sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -588,7 +1107,9 @@ function connectStream() {
     const ev = JSON.parse(m.data);
     upsertEvent(ev); renderFeed();
     if (!streams[ev.deviceId]) showStill(ev.deviceId);
-    if (ev.kind === 'opened' || ev.kind === 'closed') loadDevices();
+    if (ev.kind === 'opened' || ev.kind === 'closed' || ev.kind === 'done' || ev.kind === 'fridge') loadDevices();
+    if (ev.kind === 'internet' || ev.kind === 'reminder' || ev.kind === 'network') { loadHome(); if (location.hash === '#network') loadHealth(); }
+    pictureFor(ev);
   };
 }
 
@@ -711,7 +1232,7 @@ function showView() {
   const net = location.hash === '#network';
   $('main').hidden = net; $('#netview').hidden = !net;
   $$('nav a').forEach(a => a.classList.toggle('on', (a.dataset.view === 'network') === net));
-  if (net) { Object.keys(streams).forEach(stopLive); loadNetwork(false); }
+  if (net) { Object.keys(streams).forEach(stopLive); loadNetwork(false); loadHealth(); }
 }
 addEventListener('hashchange', showView);
 $('nav a[data-view="home"]').addEventListener('click', e => { e.preventDefault(); history.pushState(null, '', location.pathname); showView(); });
@@ -721,8 +1242,11 @@ $('nav a[data-view="home"]').addEventListener('click', e => { e.preventDefault()
   initPush();
   await reloadEvents();
   await loadDevices();
+  loadHome();
   connectStream();
   setInterval(() => { if (!document.hidden) loadDevices(); }, 60 * 1000);
+  setInterval(() => { if (!document.hidden) loadHome(); }, 2 * 60 * 1000);
+  setInterval(() => { if (!document.hidden && location.hash === '#network') loadHealth(); }, 60 * 1000);
 })();
 </script>
 </body>

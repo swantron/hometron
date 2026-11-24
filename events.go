@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -264,6 +265,55 @@ func (e *Events) post(in Event, thread string) {
 	if alert && e.OnAlert != nil {
 		go e.OnAlert(ev)
 	}
+}
+
+// attachWindow: how long after an event a browser-grabbed frame can still be its picture.
+const attachWindow = 2 * time.Minute
+
+// Attach gives a media-less event a picture grabbed from the live stream. Google won't
+// hand out event images for WebRTC-only cameras, so an open dashboard fetches one instead.
+// Only a recent row from the same device that has no picture yet can be filled.
+func (e *Events) Attach(id, deviceID string, jpeg []byte, now time.Time) (Event, error) {
+	e.mu.Lock()
+	i := len(e.recent) - 1
+	for ; i >= 0 && e.recent[i].ID != id; i-- {
+	}
+	if i < 0 || e.recent[i].DeviceID != deviceID || e.recent[i].Media != "" ||
+		now.Sub(e.recent[i].Time) > attachWindow || now.Before(e.recent[i].Time.Add(-time.Minute)) {
+		e.mu.Unlock()
+		return Event{}, errNotAllowed
+	}
+	e.mu.Unlock()
+
+	// Unique per upload, so a second tab racing this one can't overwrite the winner's file.
+	name := e.save(e.recent[i].Time.UTC().Format("20060102-150405")+"-"+short(deviceID)+
+		"-live"+strconv.FormatInt(now.UnixNano()%1e9, 36)+".jpg", jpeg)
+	if name == "" {
+		return Event{}, os.ErrInvalid
+	}
+
+	e.mu.Lock()
+	if i >= len(e.recent) || e.recent[i].ID != id { // feed trimmed meanwhile: look again
+		for i = len(e.recent) - 1; i >= 0 && e.recent[i].ID != id; i-- {
+		}
+	}
+	if i < 0 || e.recent[i].Media != "" { // another tab got there first
+		e.mu.Unlock()
+		os.Remove(filepath.Join(e.dir, name))
+		return Event{}, errNotAllowed
+	}
+	e.recent[i].Media = name
+	ev := e.recent[i]
+	for ch := range e.subs {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+	e.mu.Unlock()
+	e.appendLog(ev)
+	log.Printf("event: %s %s picture from live view", ev.Device, ev.Kind)
+	return ev, nil
 }
 
 // foldable returns the index of a recent row the event can be folded into, or -1.

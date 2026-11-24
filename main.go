@@ -27,9 +27,9 @@ import (
 var webFS embed.FS
 
 func main() {
-	home, _ := os.UserHomeDir()
+	homeDir, _ := os.UserHomeDir()
 	listen := flag.String("listen", "127.0.0.1:8080", "comma-separated addresses to serve on: the Tailscale IP for phones, plus 127.0.0.1:PORT if `tailscale serve` adds HTTPS in front")
-	state := flag.String("state", filepath.Join(home, "nest"), "directory with credentials.json, token.json and events/")
+	state := flag.String("state", filepath.Join(homeDir, "nest"), "directory with credentials.json, token.json and events/")
 	topic := flag.String("topic", "home-nest-events", "Pub/Sub topic Device Access publishes to")
 	sub := flag.String("sub", "hometron", "Pub/Sub subscription to pull from")
 	noEvents := flag.Bool("no-events", false, "skip Pub/Sub (devices and live view only)")
@@ -54,15 +54,41 @@ func main() {
 		log.Printf("%d devices", len(devs))
 	}
 
+	lan := newNetwork(*state)
+	home := &Home{Printer: newPrinter(*state, lan), Internet: newInternet(*state, events), Net: newNetWatch(*state, lan, events)}
+	lan.OnScan = home.Net.OnScan // set before the first scan
+	go lan.Run(ctx, 10*time.Minute)
+	go home.Printer.Run(ctx)
+	go home.Internet.Run(ctx)
+	go home.Net.Run(ctx)
+
+	if home.Weather, err = loadWeather(*state); err != nil {
+		log.Fatalf("weather: %v", err)
+	}
+	var outdoor func() *float64
+	if home.Weather != nil {
+		go home.Weather.Run(ctx)
+		outdoor = home.Weather.OutdoorF
+	}
+	home.Net.outdoor = outdoor
+	nestP := nest{sdm}
+	home.History = newHistory(*state, nestP.Devices, outdoor)
+	go home.History.Run(ctx, sdm.Invalidate)
+
 	if !*noEvents {
 		ps := newPubSub(g, *topic, *sub)
 		if err := ps.Ensure(ctx); err != nil {
 			log.Fatalf("pubsub setup: %v", err)
 		}
 		log.Printf("events: pulling %s (Device Access must publish to %s)", ps.sub, ps.topic)
-		go ps.Run(ctx, func(b []byte) { events.Handle(ctx, b) })
+		go ps.Run(ctx, func(b []byte) {
+			if isTraitUpdate(b) {
+				home.History.Poke() // thermostat changed: record it
+			}
+			events.Handle(ctx, b)
+		})
 	}
-	providers := []Provider{nest{sdm}}
+	providers := []Provider{nestP}
 	tw, err := loadTailwind(*state, events)
 	if err != nil {
 		log.Fatalf("tailwind: %v", err)
@@ -72,15 +98,50 @@ func main() {
 		go tw.Run(ctx)
 		providers = append(providers, tw)
 	}
+	laundry, err := loadLaundry(*state, events)
+	if err != nil {
+		log.Fatalf("laundry: %v", err)
+	}
+	if laundry != nil {
+		log.Printf("laundry: polling LG ThinQ")
+		go laundry.Run(ctx)
+		providers = append(providers, laundry)
+	}
+
+	if home.SmartThings, err = loadSmartThings(*state, events); err != nil {
+		log.Fatalf("smartthings: %v", err)
+	}
+	if home.SmartThings != nil {
+		go home.SmartThings.Run(ctx)
+		providers = append(providers, home.SmartThings)
+	}
+	if home.Calendar, err = loadCalendar(*state, events); err != nil {
+		log.Fatalf("calendar: %v", err)
+	}
+	if home.Calendar != nil {
+		go home.Calendar.Run(ctx)
+	}
+	if home.Caster, err = loadCaster(*state, lan); err != nil {
+		log.Fatalf("cast: %v", err)
+	}
+	if home.Caster != nil {
+		go func() {
+			if err := home.Caster.Serve(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("cast: can't serve the chime: %v", err) // dashboard keeps working
+			}
+		}()
+	}
 
 	push, err := loadPush(*state)
 	if err != nil {
 		log.Fatalf("push: %v", err)
 	}
-	events.OnAlert = push.Notify
-
-	lan := newNetwork(*state)
-	go lan.Run(ctx, 10*time.Minute)
+	events.OnAlert = func(ev Event) {
+		if home.Caster != nil {
+			go home.Caster.OnEvent(ev)
+		}
+		push.Notify(ev)
+	}
 
 	go func() {
 		for t := time.NewTicker(time.Hour); ; <-t.C {
@@ -89,7 +150,7 @@ func main() {
 	}()
 
 	mediaDir := filepath.Join(*state, "events")
-	srv := &http.Server{Handler: routes(providers, events, lan, newSnapshots(mediaDir), push, mediaDir)}
+	srv := &http.Server{Handler: routes(providers, events, lan, newSnapshots(mediaDir), push, home, mediaDir)}
 	go func() {
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -110,8 +171,9 @@ func main() {
 	}
 }
 
-func routes(providers []Provider, events *Events, lan *Network, snaps *Snapshots, push *Push, mediaDir string) http.Handler {
+func routes(providers []Provider, events *Events, lan *Network, snaps *Snapshots, push *Push, home *Home, mediaDir string) http.Handler {
 	mux := http.NewServeMux()
+	home.routes(mux)
 
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := webFS.ReadFile("web/index.html")
@@ -265,7 +327,15 @@ func routes(providers []Provider, events *Events, lan *Network, snaps *Snapshots
 			http.Error(w, "expected a JPEG under 3 MB", http.StatusBadRequest)
 			return
 		}
-		snap, err := snaps.Save(id, b, time.Now())
+		now := time.Now()
+		// ?event= also makes this frame the picture for a person event that came without one.
+		if evID := r.URL.Query().Get("event"); evID != "" {
+			if _, err := events.Attach(evID, id, b, now); err != nil {
+				http.Error(w, "that event can't take a picture (wrong camera, too old, or already has one)", http.StatusConflict)
+				return
+			}
+		}
+		snap, err := snaps.Save(id, b, now)
 		if err != nil {
 			httpErr(w, err)
 			return
@@ -348,6 +418,19 @@ type deviceView struct {
 	Problem  string `json:"problem,omitempty"`  // why it can't be operated right now
 	NoSensor bool   `json:"noSensor,omitempty"` // door position unknowable; show a camera instead
 	Camera   string `json:"camera,omitempty"`   // label of the camera that watches it
+
+	// laundry
+	Run       string `json:"run,omitempty"`       // "Washing", "Done", "Off"
+	RemainMin *int   `json:"remainMin,omitempty"` // minutes left in the cycle
+	Active    bool   `json:"active,omitempty"`    // a load is in progress
+
+	// fridge
+	Parts    []FridgePart `json:"parts,omitempty"`
+	FilterPc *int         `json:"filterPc,omitempty"` // water filter used, percent
+	Ice      string       `json:"ice,omitempty"`      // ice makers, summarized
+	KWhMonth *float64     `json:"kwhMonth,omitempty"` // energy used this month
+	KWhLast  *float64     `json:"kwhLast,omitempty"`
+	Notes    []string     `json:"notes,omitempty"` // defrosting, Power Freeze on, ...
 
 	// thermostat (and garage)
 	Online   bool     `json:"online,omitempty"`
