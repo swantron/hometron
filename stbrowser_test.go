@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 // fakeAccount mimics account.smartthings.com: /tokens needs a session cookie (else it
@@ -32,7 +31,8 @@ func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/login":
 		// Signing in sets a persistent session, like "keep me signed in".
-		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "ok", Path: "/", MaxAge: 3600})
+		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "ok", Path: "/"}) // session-only, like SmartThings'
+
 		fmt.Fprint(w, "<html><body>signed in</body></html>")
 	case r.URL.Path == "/tokens":
 		if !signedIn {
@@ -90,37 +90,47 @@ func TestRenewPATWithChrome(t *testing.T) {
 	f := &fakeAccount{tokens: []map[string]any{{"authKey": "mine", "deviceName": "Hometron"}}} // the person's own token
 	srv := httptest.NewServer(f)
 	defer srv.Close()
-	profile := t.TempDir()
+	profile, _ := os.MkdirTemp("", "hometron-st-")
+	defer os.RemoveAll(profile) // best effort: Chrome may still be tidying up
+	b := &stBrowser{bin: chromeBin, profile: profile, base: srv.URL, headless: true}
+	defer b.Quit()
 	ctx := context.Background()
 
-	if _, err := renewPAT(ctx, chromeBin, profile, srv.URL); !errors.Is(err, errNeedsSignIn) {
-		t.Fatalf("before sign-in: %v", err)
+	// Nothing running: needs sign-in, and nothing gets started behind anyone's back.
+	if _, err := b.Renew(ctx); !errors.Is(err, errNeedsSignIn) {
+		t.Fatalf("no browser: %v", err)
 	}
-	// "Sign in": visit the login URL in the same profile, then quit Chrome.
-	c, err := startChrome(ctx, chromeBin, profile, true, "about:blank")
+	if err := b.ShowSignIn(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.KeepAlive(ctx); !errors.Is(err, errNeedsSignIn) {
+		t.Fatalf("before signing in: %v", err)
+	}
+	// "Sign in" in the running browser: a session-only cookie, like SmartThings'.
+	c, err := b.connect(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.openPage(ctx, srv.URL+"/login"); err != nil {
-		t.Fatal(err)
+	tab, _, _ := c.openPage(ctx, srv.URL+"/login", false)
+	c.closeTab(tab)
+	c.disconnect()
+	if err := b.KeepAlive(ctx); err != nil {
+		t.Fatalf("after signing in: %v", err)
 	}
-	c.close()
-	time.Sleep(500 * time.Millisecond) // let Chrome flush its cookie store
-
-	tok1, err := renewPAT(ctx, chromeBin, profile, srv.URL)
+	tok1, err := b.Renew(ctx)
 	if err != nil || tok1 != "tok-1" {
 		t.Fatalf("first renew = %q, %v", tok1, err)
 	}
-	tok2, err := renewPAT(ctx, chromeBin, profile, srv.URL)
+	tok2, err := b.Renew(ctx)
 	if err != nil || tok2 != "tok-2" {
 		t.Fatalf("second renew = %q, %v", tok2, err)
 	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	var keys []string
 	for _, tk := range f.tokens {
 		keys = append(keys, tk["authKey"].(string))
 	}
+	f.mu.Unlock()
 	// The person's own token stays; only hometron's previous one was deleted.
 	if strings.Join(keys, ",") != "mine,k2" {
 		t.Errorf("tokens left = %v", keys)

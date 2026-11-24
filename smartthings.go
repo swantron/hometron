@@ -54,14 +54,13 @@ type SmartThings struct {
 	tokenPath string
 
 	// auto-renewal of the personal token (see stbrowser.go)
-	chrome    string
-	profile   string
-	account   string // https://account.smartthings.com
+	browser   *stBrowser
 	needRenew bool
 	signingIn bool
 	renewErr  error
 	lastTry   time.Time
-	api       string // stAPI, or a test server
+	aliveAt   time.Time // last keep-alive visit
+	api       string    // stAPI, or a test server
 	http      *http.Client
 	events    *Events
 
@@ -113,8 +112,8 @@ func loadSmartThings(stateDir string, events *Events) (*SmartThings, error) {
 		return nil, errors.New("smartthings.json: need a token, or clientId and clientSecret")
 	}
 	st := &SmartThings{cfg: cfg, cfgPath: filepath.Join(stateDir, "smartthings.json"), tokenPath: filepath.Join(stateDir, "smartthings-token.json"), api: stAPI,
-		chrome: chromeBin, profile: stProfileDir(stateDir), account: "https://account.smartthings.com",
-		http: &http.Client{Timeout: 20 * time.Second}, events: events, fridges: map[string]*fridge{}}
+		browser: &stBrowser{bin: chromeBin, profile: stProfileDir(stateDir), base: "https://account.smartthings.com"},
+		http:    &http.Client{Timeout: 20 * time.Second}, events: events, fridges: map[string]*fridge{}}
 	if b, err := os.ReadFile(st.tokenPath); err == nil {
 		json.Unmarshal(b, &st.tok)
 	}
@@ -128,23 +127,41 @@ func (st *SmartThings) Connected() bool {
 	return st.cfg.Token != "" || st.tok.Refresh != ""
 }
 
-// maybeRenew makes a new personal token when the current one is near its 24 hours or was
-// rejected. Not while the sign-in window has the browser profile open, and not more than
-// every 10 minutes after a failure.
+// maybeRenew keeps the browser session alive (every 10 minutes) and makes a new personal
+// token when the current one is near its 24 hours or was rejected. Not while someone is
+// signing in, and not more than every 10 minutes after a failure.
 func (st *SmartThings) maybeRenew(ctx context.Context, now time.Time) {
 	st.authMu.Lock()
-	due := st.cfg.Auto && (st.needRenew || st.cfg.RenewedAt.IsZero() || now.Sub(st.cfg.RenewedAt) > 20*time.Hour)
-	if st.signingIn || (st.renewErr != nil && now.Sub(st.lastTry) < 10*time.Minute) {
+	if !st.cfg.Auto || st.signingIn {
+		st.authMu.Unlock()
+		return
+	}
+	due := st.needRenew || st.cfg.RenewedAt.IsZero() || now.Sub(st.cfg.RenewedAt) > 20*time.Hour
+	if st.renewErr != nil && now.Sub(st.lastTry) < 10*time.Minute {
 		due = false
 	}
+	alive := !due && now.Sub(st.aliveAt) >= 10*time.Minute && !errors.Is(st.renewErr, errNeedsSignIn)
 	if due {
 		st.lastTry = now
 	}
+	if alive {
+		st.aliveAt = now
+	}
 	st.authMu.Unlock()
+
+	if alive {
+		if err := st.browser.KeepAlive(ctx); err != nil {
+			log.Printf("smartthings: keep-alive: %v", err)
+			st.authMu.Lock()
+			st.renewErr, st.lastTry = err, now
+			st.authMu.Unlock()
+		}
+		return
+	}
 	if !due {
 		return
 	}
-	tok, err := renewPAT(ctx, st.chrome, st.profile, st.account)
+	tok, err := st.browser.Renew(ctx)
 	st.authMu.Lock()
 	defer st.authMu.Unlock()
 	st.renewErr = err
@@ -152,7 +169,7 @@ func (st *SmartThings) maybeRenew(ctx context.Context, now time.Time) {
 		log.Printf("smartthings: renewing token: %v", err)
 		return
 	}
-	st.cfg.Token, st.cfg.RenewedAt, st.needRenew = tok, now, false
+	st.cfg.Token, st.cfg.RenewedAt, st.needRenew, st.aliveAt = tok, now, false, now
 	b, _ := json.MarshalIndent(st.cfg, "", "  ")
 	tmp := st.cfgPath + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err == nil {
@@ -161,31 +178,50 @@ func (st *SmartThings) maybeRenew(ctx context.Context, now time.Time) {
 	log.Printf("smartthings: new 24-hour token")
 }
 
-// SignIn opens the sign-in window on the server's screen; renewal is tried again as
-// soon as it's closed.
+// SignIn puts the SmartThings tokens page in front in the session browser on the server's
+// screen, then checks every 15 seconds (for up to half an hour) until the session works.
+// No need to close anything afterwards: the browser stays running to keep the session.
 func (st *SmartThings) SignIn() error {
 	st.authMu.Lock()
 	if st.signingIn {
 		st.authMu.Unlock()
-		return errors.New("the sign-in window is already open on the server")
+		return errors.New("already waiting for a sign-in on the server")
 	}
 	st.signingIn = true
 	st.authMu.Unlock()
-	err := openSignIn(st.chrome, st.profile, st.account, func() {
-		st.authMu.Lock()
-		st.signingIn, st.needRenew, st.renewErr = false, true, nil
-		st.authMu.Unlock()
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		st.maybeRenew(ctx, time.Now())
-		st.poll(ctx, time.Now())
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	err := st.browser.ShowSignIn(ctx)
+	cancel()
 	if err != nil {
 		st.authMu.Lock()
 		st.signingIn = false
 		st.authMu.Unlock()
+		return err
 	}
-	return err
+	go func() {
+		deadline := time.Now().Add(30 * time.Minute)
+		for time.Now().Before(deadline) {
+			time.Sleep(15 * time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			err := st.browser.KeepAlive(ctx)
+			cancel()
+			if err == nil {
+				log.Printf("smartthings: signed in")
+				st.authMu.Lock()
+				st.signingIn, st.needRenew, st.renewErr = false, true, nil
+				st.authMu.Unlock()
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				st.maybeRenew(ctx, time.Now())
+				st.poll(ctx, time.Now())
+				cancel()
+				return
+			}
+		}
+		st.authMu.Lock()
+		st.signingIn = false
+		st.authMu.Unlock()
+	}()
+	return nil
 }
 
 // accessToken returns a usable bearer token, refreshing an OAuth one that's about to expire.
@@ -642,7 +678,7 @@ func (st *SmartThings) Devices(ctx context.Context) ([]deviceView, error) {
 	defer st.mu.Unlock()
 	if signingIn {
 		return []deviceView{{ID: "st:signin", Kind: "fridge", Label: "SmartThings", Run: "signing-in",
-			Problem: "Sign in in the Chrome window on the server (Screen Sharing), tick “keep me signed in”, then quit Chrome."}}, nil
+			Problem: "Sign in in the Chrome window on the server (Screen Sharing). Leave Chrome open afterwards: hometron notices the sign-in by itself."}}, nil
 	}
 	if auto && errors.Is(renewErr, errNeedsSignIn) && len(st.fridges) == 0 {
 		return []deviceView{{ID: "st:signin", Kind: "fridge", Label: "SmartThings", Run: "signin", Problem: "SmartThings sign-in expired"}}, nil
