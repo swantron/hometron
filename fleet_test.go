@@ -105,3 +105,35 @@ func TestFleetDiff(t *testing.T) {
 		t.Errorf("reported a newly connected provider or an unchanged droplet: %v", got)
 	}
 }
+
+func TestWorkspaceSuggestions(t *testing.T) {
+	old := time.Now().AddDate(0, -4, 0).Format("2006-01-02")
+	recent := time.Now().AddDate(0, 0, -2).Format("2006-01-02")
+	w := &WorkspaceView{PerUser: 8.4, Users: []WSUser{
+		{Email: "me@x.com", Admin: true, TwoStep: true, LastLogin: recent},
+		{Email: "kid@x.com", TwoStep: false, LastLogin: recent},
+		{Email: "boss@x.com", Admin: true, TwoStep: false, LastLogin: recent},
+		{Email: "old@x.com", TwoStep: true, LastLogin: old},
+		{Email: "new@x.com", TwoStep: true},
+		{Email: "gone@x.com", Suspended: true},
+	}}
+	var got []string
+	for _, s := range workspaceSuggestions(w) {
+		got = append(got, s.Level+": "+s.Text)
+	}
+	all := strings.Join(got, "\n")
+	for _, want := range []string{
+		"check: Workspace user kid@x.com has no 2-step verification",
+		"fix: Workspace user boss@x.com has no 2-step verification (and is an admin)",
+		"check: Workspace user old@x.com hasn't signed in since " + old,
+		"check: Workspace user new@x.com has never signed in",
+		"kill: Workspace user gone@x.com is suspended but still a paid seat",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("missing %q in:\n%s", want, all)
+		}
+	}
+	if strings.Contains(all, "me@x.com") || strings.Contains(all, "gone@x.com has no 2-step") {
+		t.Errorf("flagged a healthy or suspended account:\n%s", all)
+	}
+}

@@ -171,6 +171,17 @@ Each is a file in `~/nest/` (chmod 600). Leave it out and that feature stays off
   flags empty projects, unattached disks and volumes, unused IPs, Cloud Run with no traffic, oversized
   App Platform plans, image repos over 1 GB, and extra e2-micro VMs beyond the free tier.
 
+  **Google Workspace seats.** If the Fleet sign-in also has `admin.directory.user.readonly` and
+  `admin.reports.usage.readonly`, Fleet lists each user with their last sign-in, the last activity
+  per app (from Google's usage report, which trails by 2–4 days) and whether they have 2-step
+  verification. It flags suspended accounts that are still billed, seats unused for 60 days, and
+  accounts with no 2-step verification. Admins without it are marked "fix".
+
+  Google has no billing API for Workspace bought directly, so set the price in `fleet.json`:
+  `"workspace": {"plan": "Business Standard", "usdPerUser": 14}`. A Workspace domain that blocks
+  unverified apps needs this OAuth client marked Trusted, under Admin console → Security →
+  API controls → App access control.
+
 ## HTTPS (needed for alerts and installing it as an app)
 
 Browsers only allow push and home-screen install on https. Tailscale provides the certificate:

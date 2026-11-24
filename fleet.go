@@ -40,9 +40,10 @@ type fleetConfig struct {
 		Expires   string `json:"expires"`
 		Registrar string `json:"registrar"`
 	} `json:"domains"`
-	Checks       []string    `json:"checks"`
-	Fixed        []FixedCost `json:"fixed"`
-	QuotaProject string      `json:"gcpQuotaProject"`
+	Checks       []string         `json:"checks"`
+	Fixed        []FixedCost      `json:"fixed"`
+	QuotaProject string           `json:"gcpQuotaProject"`
+	Workspace    *workspaceConfig `json:"workspace"`
 }
 
 type FixedCost struct {
@@ -106,13 +107,14 @@ type Suggestion struct {
 }
 
 type FleetInventory struct {
-	At          time.Time    `json:"at"`
-	Resources   []Resource   `json:"resources"`
-	Projects    []GCPProject `json:"projects,omitempty"`
-	DOMonth     *float64     `json:"doMonthToDate,omitempty"`
-	DOInvoices  []Invoice    `json:"doInvoices,omitempty"`
-	Errors      []string     `json:"errors,omitempty"`
-	Suggestions []Suggestion `json:"suggestions,omitempty"`
+	At          time.Time      `json:"at"`
+	Resources   []Resource     `json:"resources"`
+	Projects    []GCPProject   `json:"projects,omitempty"`
+	DOMonth     *float64       `json:"doMonthToDate,omitempty"`
+	DOInvoices  []Invoice      `json:"doInvoices,omitempty"`
+	Errors      []string       `json:"errors,omitempty"`
+	Suggestions []Suggestion   `json:"suggestions,omitempty"`
+	Workspace   *WorkspaceView `json:"workspace,omitempty"`
 }
 
 type Invoice struct {
@@ -199,11 +201,19 @@ func (f *Fleet) Inventory(ctx context.Context) {
 		if f.gcp == nil {
 			return
 		}
+		ws, wsErr := f.workspace(ctx)
 		res, projects, errs := f.googleCloud(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		inv.Resources = append(inv.Resources, res...)
 		inv.Projects = projects
+		inv.Workspace = ws
+		switch {
+		case wsErr == errScope:
+			inv.Errors = append(inv.Errors, "Google Workspace: the Fleet sign-in doesn't include the Admin read-only scopes yet")
+		case wsErr != nil:
+			inv.Errors = append(inv.Errors, "Google Workspace: "+shortErr(wsErr))
+		}
 		inv.Errors = append(inv.Errors, errs...)
 	}()
 	wg.Wait()
@@ -223,6 +233,7 @@ func (f *Fleet) Inventory(ctx context.Context) {
 	old := f.inv
 	f.mu.Unlock()
 	inv.Suggestions = f.suggest(inv)
+	inv.Suggestions = append(inv.Suggestions, workspaceSuggestions(inv.Workspace)...)
 	if old.At.IsZero() || (len(inv.Errors) == 0 && len(old.Errors) == 0) {
 		f.diff(old, inv)
 	}
