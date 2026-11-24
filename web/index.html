@@ -24,11 +24,34 @@
   .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); }
   .dot.on { background:var(--ok); } .dot.off { background:var(--bad); }
 
-  main { display:grid; gap:16px; padding:16px; grid-template-columns:1fr; grid-template-areas:"quick" "glance" "cams" "feed"; }
-  @media (min-width:1000px) { main { grid-template-columns:2fr 1fr; grid-template-areas:"cams quick" "cams glance" "cams feed"; grid-template-rows:auto auto 1fr; align-items:start; } }
-  #quick { grid-area:quick; display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); }
-  #camsec { grid-area:cams; } #feedsec { grid-area:feed; }
-  #glance { grid-area:glance; display:grid; gap:12px; }
+  /* Phones: one column in order of use (controls, what happened, cameras, the rest).
+     Desktop: cameras + the house at a glance on the left, controls + activity on the right. */
+  main { display:flex; flex-direction:column; gap:16px; padding:16px; }
+  main > .col { display:contents; }
+  #quick { order:1; } #feedsec { order:2; } #camsec { order:3; } #glance { order:4; }
+  @media (min-width:1000px) {
+    main { display:grid; grid-template-columns:minmax(0, 2fr) minmax(320px, 1fr); align-items:start; }
+    main > .col { display:flex; flex-direction:column; gap:16px; min-width:0; }
+    #glance { grid-template-columns:1fr 1fr; align-items:start; }
+    #glance > .wide { grid-column:1 / -1; }
+    /* Controls above the cameras (thermostat on the right); Activity gets the whole right
+       column and stays in view while the left side scrolls. */
+    #quick { grid-template-columns:1fr 1fr; grid-auto-flow:dense; align-items:start; }
+    #quick > .thermo { grid-column:2; grid-row:span 4; }
+    #quick > :not(.thermo) { grid-column:1; }
+    main > .col:last-child { position:sticky; top:73px; height:calc(100vh - 89px); }
+    #feedsec { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #feedsec .feed { flex:1; max-height:none; }
+    /* Cameras: the first (the doorbell) big, the rest four to its right, then rows of four. */
+    .cams { grid-template-columns:repeat(4, minmax(0, 1fr)) !important; }
+    .cams > .cam:first-child:nth-last-child(n+3) { grid-column:span 2; grid-row:span 2; display:flex; flex-direction:column; }
+    .cams { align-items:start; }
+    .cams > .cam:first-child:nth-last-child(n+3) { align-self:stretch; }
+    .cams > .cam:first-child:nth-last-child(n+3) .view { flex:1; aspect-ratio:auto; min-height:0; }
+    .cams > .cam:first-child:nth-last-child(n+3) .view > :is(img, video) { position:absolute; inset:0; }
+  }
+  #quick { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); }
+  #glance { display:grid; gap:12px; }
   #glance:empty { display:none; }
   h2 { font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin:0 0 10px; display:flex; align-items:center; gap:8px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
@@ -48,10 +71,11 @@
   .garage.open .state { color:var(--warn); } .garage.closed .state { color:var(--ok); }
   .garage .grow { flex:1; min-width:0; }
   .garage .problem { color:var(--bad); font-size:12px; margin-top:2px; }
-  .garage.nosensor { display:block; padding:0; }
-  .garage .gview { position:relative; aspect-ratio:16/9; background:#000; display:grid; place-items:center; cursor:pointer; }
+  .garage.nosensor { display:flex; align-items:center; gap:12px; padding:10px 12px; }
+  .garage .gview { position:relative; width:112px; flex:none; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; display:grid; place-items:center; cursor:pointer; font-size:11px; text-align:center; }
   .garage .gview img { width:100%; height:100%; object-fit:cover; display:block; }
-  .garage .gbar { display:flex; align-items:center; gap:8px; padding:10px 12px; }
+  .garage .gview .badge { top:auto; bottom:3px; left:3px; font-size:10px; padding:1px 4px; }
+  .garage .gbar { display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
   .garage .name { font-weight:600; }
   .cam .snap { display:inline-flex; } .cam.live .snap { display:none; }
   .cam.busy .view::after { content:'grabbing a still…'; position:absolute; bottom:8px; right:10px; font-size:12px; color:#c9d1db; }
@@ -142,13 +166,22 @@
   .chips { margin-left:auto; display:flex; gap:4px; }
   .chips button { padding:2px 10px; font-size:12px; text-transform:none; letter-spacing:0; border-radius:999px; }
   .feed { display:flex; flex-direction:column; gap:6px; max-height:75vh; overflow:auto; padding:8px; }
-  @media (max-width:999px) { .feed { max-height:none; } }
+  @media (max-width:999px) { .feed { max-height:440px; } }
+  @media (max-width:640px) {
+    .cams { grid-template-columns:1fr 1fr !important; gap:8px !important; }
+    .cam.live { grid-column:1 / -1; }
+    .cam .bar { padding:6px 8px; } .cam .name { font-size:13px; } .cam .sub { font-size:11px; }
+    .cam .snap { display:none; } .cam .view .play { width:40px; height:40px; font-size:16px; }
+    .cam .view .vhint { display:none; } .badge { font-size:10px; }
+    main { padding:10px; gap:12px; }
+  }
   .day { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:8px 4px 2px; }
   .day:first-child { margin-top:0; }
   .ev { display:flex; gap:10px; align-items:center; padding:6px; border-radius:8px; }
   .ev:hover { background:#202731; }
   .ev .thumb { width:96px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; background:#000; flex:none; display:grid; place-items:center; font-size:22px; position:relative; }
   .ev .thumb.media { cursor:pointer; }
+  .ev .thumb.icon { width:40px; height:40px; aspect-ratio:auto; border-radius:50%; background:#222a33; font-size:18px; margin:0 28px; }
   .ev .thumb .tag { position:absolute; bottom:3px; right:4px; font-size:10px; background:rgba(0,0,0,.6); padding:0 4px; border-radius:3px; }
   .ev .grow { flex:1; min-width:0; }
   .ev .kind { font-weight:600; }
@@ -164,6 +197,23 @@
   nav a { color:var(--dim); text-decoration:none; padding:4px 10px; border-radius:999px; font-size:13px; }
   nav a.on { color:var(--text); background:#26303b; }
   #netview { padding:16px; max-width:1100px; }
+  #fleetview { padding:16px; max-width:1200px; display:flex; flex-direction:column; gap:12px; }
+  #fleetview h2 { margin:8px 0 0; }
+  .fsum { padding:14px; display:flex; flex-wrap:wrap; gap:10px 28px; align-items:center; }
+  .fsum .big { font-size:20px; font-weight:600; flex:1 1 260px; } .fsum .big.ok { color:var(--ok); } .fsum .big.bad { color:var(--bad); }
+  .fsum .facts { display:flex; gap:24px; flex-wrap:wrap; font-size:13px; }
+  .fsum details { flex-basis:100%; } .fsum ul { margin:6px 0 0; padding-left:18px; }
+  .sugg .s { display:flex; gap:12px; padding:10px 12px; border-bottom:1px solid var(--line); font-size:13px; align-items:baseline; }
+  .sugg .s:last-child { border-bottom:0; }
+  .lvl { font-size:11px; font-weight:700; text-transform:uppercase; padding:2px 7px; border-radius:4px; flex:none; width:44px; text-align:center; }
+  .lvl.kill { background:#4a1d1d; color:#ffb4b4; } .lvl.trim { background:#4a3612; color:#ffd58a; } .lvl.check { background:#1d3550; color:#a8d0ff; }
+  .strip { display:flex; gap:1px; height:18px; min-width:150px; } .strip i { flex:1; border-radius:1px; background:var(--ok); }
+  .strip i.none { background:#2a323c; } .strip i.slow { background:var(--warn); } .strip i.down { background:var(--bad); }
+  table.fleet tr.down td:first-child a { color:var(--bad); }
+  .invgrid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(min(100%, 520px), 1fr)); align-items:start; }
+  .inv .k { display:flex; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); font-size:13px; flex-wrap:wrap; }
+  .inv tr.infra td { opacity:.55; }
+  @media (max-width:700px) { table.fleet th:nth-child(4), table.fleet td:nth-child(4), table.fleet th:nth-child(6), table.fleet td:nth-child(6) { display:none; } }
   .netbar { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
   .netbar .dim { flex:1; font-size:13px; }
   .hint { border:1px solid var(--line); border-left:3px solid var(--warn); background:var(--card); border-radius:8px; padding:10px 12px; margin-bottom:12px; font-size:13px; }
@@ -181,15 +231,19 @@
 </style>
 </head>
 <body>
-<header><h1>hometron</h1><nav><a href="#" data-view="home">Home</a><a href="#network" data-view="network">Network</a></nav><span class="status"><button id="bell" class="icon" title="Doorbell and person alerts on this device">🔕</button><span id="status">loading…</span><span class="dot" id="dot" title="live updates"></span></span></header>
+<header><h1>hometron</h1><nav><a href="#" data-view="home">Home</a><a href="#network" data-view="network">Network</a><a href="#fleet" data-view="fleet">Fleet</a></nav><span class="status"><button id="bell" class="icon" title="Doorbell and person alerts on this device">🔕</button><span id="status">loading…</span><span class="dot" id="dot" title="live updates"></span></span></header>
 <main>
+  <div class="col">
   <section id="quick"></section>
-  <section id="glance"></section>
   <section id="camsec"><h2>Cameras <span class="chips"><button id="snapall" title="Grab a fresh still from every camera">📷 Refresh stills</button></span></h2><div class="cams" id="cams"></div></section>
+  <section id="glance"></section>
+  </div>
+  <div class="col">
   <section id="feedsec">
     <h2>Activity <span class="chips"><button data-f="key" class="on">Important</button><button data-f="all">All</button></span></h2>
     <div class="card feed" id="feed"><div class="empty">No events yet.</div></div>
   </section>
+  </div>
 </main>
 <div id="netview" hidden>
   <div id="nethealth"></div>
@@ -203,7 +257,7 @@
   <h2 style="margin-top:18px">Not answering now <span class="dim" style="text-transform:none;letter-spacing:0">seen in the last 14 days</span></h2>
   <div class="card"><table class="net"><tbody id="netgone"></tbody></table></div>
 </div>
-<dialog id="lightbox"></dialog>
+<div id="fleetview" hidden></div><dialog id="lightbox"></dialog>
 <div id="toast"></div>
 
 <script>
@@ -309,7 +363,9 @@ function fridgeCard(f) {
         open.length ? open.map(p => `${p.name} door open${p.openMin ? ' ' + p.openMin + 'm' : ''}`).join(', ') : temps || f.label)),
       h('div', { class: 'dim' }, open.length ? temps : f.label, extra ? ' · ' + extra : '', f.online === false && !f.problem ? ' · not reporting' : ''),
       f.problem ? h('div', { class: 'dim', style: 'color:var(--bad)' }, f.problem) : null,
-      f.run === 'needs-signin' ? h('div', { class: 'dim', style: 'color:var(--warn);margin-top:4px' }, 'Token renewal needs a SmartThings sign-in on the server. ',
+      f.run === 'needs-signin' ? h('div', { class: 'dim', style: 'color:var(--warn);margin-top:4px' },
+        f.signInBy ? `Fridge data stops ${new Date(f.signInBy).toDateString() === new Date().toDateString() ? '' : 'tomorrow '}at ${clock(f.signInBy)} unless someone signs in to SmartThings on the server. `
+          : 'Token renewal needs a SmartThings sign-in on the server. ',
         h('a', { href: '#', style: 'color:var(--accent)', onclick: async e => {
           e.preventDefault();
           try { await postJSON('/api/smartthings/signin', {}); toastOK('Chrome is open on the server: connect with Screen Sharing to sign in.'); }
@@ -348,7 +404,7 @@ function sensorlessGarageCard(g) {
   const still = cam && stillFor(cam.id);
   const btn = h('button', { disabled: !!g.problem }, 'Press');
   const view = h('div', { class: 'gview', onclick: () => cam && openLiveFromCard(cam.id) },
-    still ? h('img', { src: still.src, alt: '' }) : h('div', { class: 'dim' }, cam ? 'No still yet. Tap to look.' : 'No garage camera'),
+    still ? h('img', { src: still.src, alt: '', title: 'Garage camera: tap for live view' }) : h('div', { class: 'dim' }, cam ? 'Tap to look' : 'No camera'),
     still ? h('span', { class: 'badge' }, ago(still.time)) : null);
   const card = h('div', { class: 'card garage nosensor', 'data-id': g.id },
     view,
@@ -440,7 +496,8 @@ function thermoHistory() {
   const th = homeData?.thermostat;
   if (!th || th.samples.length < 2) return th ? h('div', { class: 'hist dim' }, 'History starts building now: check back in an hour.') : null;
   const S = th.samples, W = 300, H = 90, pad = 2;
-  const t0 = Date.now() - 24 * 3600e3, t1 = Date.now();
+  const t1 = Date.now(), t0 = Math.max(t1 - 24 * 3600e3, new Date(S[0].t).getTime()); // until there's a day of history, span what we have
+  const span = t1 - t0 < 23 * 3600e3 ? 'Since ' + clock(t0) : 'Last 24 h';
   // Scale to inside and setpoints; in a Montana winter the outside line would flatten them.
   const vals = S.flatMap(s => [s.in, s.mode === 'HEAT' || s.mode === 'HEATCOOL' ? s.heat : null, s.mode === 'COOL' || s.mode === 'HEATCOOL' ? s.cool : null]).filter(v => v != null);
   let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
@@ -448,7 +505,7 @@ function thermoHistory() {
   const outs = S.map(s => s.out).filter(v => v != null);
   const outInRange = outs.length && Math.min(...outs) >= lo - 2 && Math.max(...outs) <= hi + 2;
   const x = t => pad + (W - 2 * pad) * (Math.max(t0, new Date(t)) - t0) / (t1 - t0);
-  const y = v => pad + (H - 2 * pad) * (1 - (v - lo) / (hi - lo));
+  const y = v => pad + (H - 2 * pad - 9) * (1 - (v - lo) / (hi - lo)); // keep clear of the heating strip
   const ns = 'http://www.w3.org/2000/svg';
   const el = (tag, a) => { const e = document.createElementNS(ns, tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
   const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Temperature over the last 24 hours' });
@@ -456,7 +513,7 @@ function thermoHistory() {
   S.forEach((s, i) => {
     if (s.hvac !== 'HEATING' && s.hvac !== 'COOLING') return;
     const a = x(s.t), b = x(i + 1 < S.length ? S[i + 1].t : t1);
-    if (b > a) svg.append(el('rect', { x: a, y: 0, width: b - a, height: H, fill: s.hvac === 'HEATING' ? 'rgba(255,122,89,.18)' : 'rgba(89,182,255,.18)' }));
+    if (b > a) svg.append(el('rect', { x: a, y: H - 6, width: b - a + 0.5, height: 6, fill: s.hvac === 'HEATING' ? 'rgba(255,122,89,.75)' : 'rgba(89,182,255,.75)' })); // a strip along the bottom, not full-height stripes
   });
   const line = (key, color, dash, ok = () => true) => {
     let d = '', prev = null;
@@ -479,11 +536,11 @@ function thermoHistory() {
   const yest = [run(th.heatYesterdayMin, 'heat'), run(th.coolYesterdayMin, 'AC')].filter(Boolean).join(', ');
   const outText = outs.length && !outInRange ? `outside ${Math.round(Math.min(...outs))}°–${Math.round(Math.max(...outs))}°` : null;
   return h('div', { class: 'hist' },
-    h('div', { class: 'dim', style: 'display:flex;justify-content:space-between' }, h('span', {}, 'Last 24 h'), h('span', {}, `${lo}° – ${hi}°`)),
+    h('div', { class: 'dim', style: 'display:flex;justify-content:space-between' }, h('span', {}, span), h('span', {}, `${lo}° – ${hi}°`)),
     svg,
     h('div', { class: 'legend' },
       h('span', {}, h('i', { style: 'background:#e6e9ee' }), 'inside'),
-      h('span', {}, h('i', { style: 'background:#ff7a59' }), 'set to'),
+      h('span', {}, h('i', { style: 'background:#ff7a59' }), 'set to · heating'),
       outInRange ? h('span', {}, h('i', { style: 'background:#8b95a3' }), 'outside') : outText ? h('span', {}, outText) : null,
       h('span', { style: 'margin-left:auto' }, today + ' today' + (yest ? ` · yesterday ${yest}` : ''))));
 }
@@ -538,8 +595,8 @@ function renderGlance() {
   const kids = [];
   if (d.weather) kids.push(weatherCard(d.weather));
   if (d.calendar) kids.push(calendarCard(d.calendar));
-  kids.push(statusRow(d));
-  if (d.setup?.length) kids.push(h('div', { class: 'setup' }, 'Not set up yet: ' + d.setup.join(', ') + ' (see README)'));
+  const st = statusRow(d); st.classList.add('wide'); kids.push(st);
+  if (d.setup?.length) kids.push(h('div', { class: 'setup wide' }, 'Not set up yet: ' + d.setup.join(', ') + ' (see README)'));
   g.replaceChildren(...kids);
 }
 
@@ -555,7 +612,7 @@ function weatherCard(w) {
       h('div', { class: 'p' + (p.day ? '' : ' night') },
         h('div', { class: 'dim' }, p.name.replace('This ', '').replace('Afternoon', 'Today')),
         h('b', {}, Math.round(p.tempF) + '°'),
-        h('div', { class: 'dim', title: p.text }, shortSky(p.text) + (p.precip ? ` · ${p.precip}%` : ''))))) : null);
+        h('div', { class: 'dim', title: p.text }, shortSky(p.text) + (p.precip >= 20 ? ` · ${p.precip}%` : ''))))) : null);
 }
 const shortSky = t => t.length > 18 ? t.split(/ then |,| and /i)[0].slice(0, 18) : t;
 
@@ -600,10 +657,9 @@ function statusRow(d) {
         h('span', { style: `height:${m.level >= 0 ? Math.max(4, m.level) : 50}%;background:${m.color || '#8b95a3'};${m.level < 0 ? 'opacity:.35' : ''}` })))) : null));
   }
   if (d.chime) {
-    cards.push(h('div', { class: 'card' },
-      h('div', { class: 'k' }, '🔔 Doorbell chime', h('button', { onclick: testChime, title: 'Play the chime on the speakers now' }, 'Test')),
-      h('div', { class: 'v ok' }, 'On'),
-      h('div', { class: 'dim' }, 'Speakers ring when the doorbell is pressed')));
+    cards.push(h('div', { class: 'card', style: 'flex:0 1 170px', title: 'Speakers ring when the doorbell is pressed' },
+      h('div', { class: 'k' }, '🔔 Chime', h('button', { onclick: testChime, title: 'Play the chime on the speakers now' }, 'Test')),
+      h('div', { class: 'v ok' }, 'On')));
   }
   return h('div', { class: 'stat' }, cards);
 }
@@ -633,7 +689,7 @@ function networkCard(n, net) {
   const ok = n ? n.ok && (!net || net.up) : net?.up;
   const words = net && !net.up ? 'Internet down since ' + clock(net.since) : n ? n.words : 'Up';
   const rep = net?.report;
-  return h('div', { class: 'card wide' },
+  return h('div', { class: 'card', style: 'flex:3 1 380px' },
     h('div', { class: 'k' }, '🌐 Network',
       h('span', {}, h('button', { onclick: speedTest, title: 'Measure download and upload from this device (about 35 MB)' }, 'Speed test'), ' ', h('a', { href: '#network' }, 'Details →'))),
     h('div', { class: 'v ' + (ok ? 'ok' : 'bad') }, words),
@@ -1000,17 +1056,36 @@ async function grabUntil(id, eventId, tries) {
   return false;
 }
 
-// A person on a camera Google won't give pictures for: if this tab is open and looking,
-// grab one from the live stream while they're probably still in frame.
+// A person (or the doorbell) on a camera Google won't give pictures for: grab one from the
+// live stream while they're probably still in frame. The server runs a headless copy of
+// this page (?capture) that does this around the clock; an open tab only steps in if that
+// copy hasn't managed it within a few seconds.
+const CAPTURE = new URLSearchParams(location.search).has('capture');
 const pictured = new Set();
-function pictureFor(ev) {
-  if (ev.media || !['person', 'chime'].includes(ev.kind) || pictured.has(ev.id) || document.hidden) return;
+async function pictureFor(ev) {
+  if (ev.media || pictured.has(ev.id) || document.hidden) return;
   const dev = devices.find(d => d.id === ev.deviceId);
   if (!dev || dev.kind !== 'camera') return; // the doorbell sends its own clip
   if (Date.now() - new Date(ev.time) > 60 * 1000) return;
+  const wanted = ['person', 'chime'].includes(ev.kind) ||
+    (CAPTURE && ev.kind === 'motion' && stillAge(ev.deviceId) > 10 * 60 * 1000); // motion: just keep the still current
+  if (!wanted) return;
   pictured.add(ev.id);
-  snapOnce(ev.deviceId, ev.id);
+  if (!CAPTURE) {
+    await new Promise(r => setTimeout(r, 12000));
+    if (events.find(e => e.id === ev.id)?.media) return;
+  }
+  ev.kind === 'motion' ? snapOnce(ev.deviceId) : snapOnce(ev.deviceId, ev.id);
 }
+const stillAge = id => { const s = stillFor(id); return s ? Date.now() - new Date(s.time) : Infinity; };
+
+// Capture mode keeps every camera's still under an hour old, one camera at a time
+// (Google rate-limits stream starts).
+if (CAPTURE) setInterval(() => {
+  const cams = devices.filter(d => d.kind === 'camera' && d.live && !streams[d.id] && !snapping.has(d.id));
+  const oldest = cams.sort((a, b) => stillAge(b.id) - stillAge(a.id))[0];
+  if (oldest && stillAge(oldest.id) > 60 * 60 * 1000) snapOnce(oldest.id);
+}, 3 * 60 * 1000);
 
 function openLiveFromCard(id) {
   const card = $(`[data-id="${CSS.escape(id)}"].cam`);
@@ -1037,9 +1112,12 @@ document.addEventListener('visibilitychange', () => {
 // ---------- activity ----------
 let events = []; // newest first
 let filter = localStorage.getItem('feedFilter') || 'key';
-const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed', 'done', 'reminder', 'internet', 'network', 'fridge']);
-const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼', done: '🧺', reminder: '🗑️', internet: '🌐', network: '📡', fridge: '🧊' };
-const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed', done: 'Laundry done', reminder: 'Reminder', internet: 'Internet', network: 'Network', fridge: 'Fridge' })[ev.kind] || ev.kind;
+const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed', 'done', 'reminder', 'internet', 'network', 'fridge', 'fleet']);
+const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼', done: '🧺', reminder: '🗑️', internet: '🌐', network: '📡', fridge: '🧊', fleet: '☁️' };
+const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed', done: 'Laundry done', reminder: 'Reminder', internet: 'Internet', network: 'Network', fridge: 'Fridge', fleet: 'Fleet' })[ev.kind] || ev.kind;
+
+// A new phone or gadget on the Wi-Fi is worth a line under All, not the Important view.
+const important = e => KEY.has(e.kind) && !(e.kind === 'network' && /^New device joined/.test(e.device));
 
 function upsertEvent(ev) {
   events = [ev, ...events.filter(e => e.id !== ev.id)].sort((a, b) => new Date(b.time) - new Date(a.time));
@@ -1047,7 +1125,7 @@ function upsertEvent(ev) {
 
 function renderFeed() {
   const feed = $('#feed');
-  const shown = events.filter(e => filter === 'all' || KEY.has(e.kind));
+  const shown = events.filter(e => filter === 'all' || important(e));
   if (!shown.length) {
     feed.replaceChildren(h('div', { class: 'empty' }, filter === 'all' ? 'No events yet.' : 'Nothing important yet. Motion and sound are under All.'));
     return;
@@ -1063,7 +1141,7 @@ function renderFeed() {
         isVid ? h('video', { src: '/media/' + ev.media + '#t=0.5', muted: true, playsinline: true, preload: 'metadata', class: 'thumb' })
               : h('img', { src: '/media/' + ev.media, loading: 'lazy', alt: '', class: 'thumb' }),
         isVid ? h('span', { class: 'tag' }, '▶') : null);
-    } else thumb = h('div', { class: 'thumb' }, ICON[ev.kind] || '•');
+    } else thumb = h('div', { class: 'thumb icon' }, ICON[ev.kind] || '•');
     rows.push(h('div', { class: 'ev' },
       thumb,
       h('div', { class: 'grow' },
@@ -1228,25 +1306,126 @@ $('#snapall').addEventListener('click', async e => {
   b.textContent = '📷 Refresh stills'; b.disabled = false;
 });
 
+
+// ---------- fleet: sites, domains, cloud inventory ----------
+let fleetData = null;
+async function loadFleet() {
+  try { const r = await fetch('/api/fleet'); if (r.ok) fleetData = await r.json(); } catch { return; }
+  renderFleet();
+}
+const usd = v => '$' + (v >= 100 ? Math.round(v) : v.toFixed(v % 1 ? 2 : 0));
+const daysTo = d => Math.round((new Date(d + 'T12:00:00') - Date.now()) / 864e5);
+
+function renderFleet() {
+  const f = fleetData, root = $('#fleetview');
+  if (!f) return;
+  if (f.setup) { root.replaceChildren(h('div', { class: 'hint' }, 'Fleet isn’t set up: add fleet.json to the state folder (see README).')); return; }
+  const inv = f.inventory || {}, sites = f.sites || [], res = inv.resources || [];
+  const fresh = inv.at && !inv.at.startsWith("0001");
+  const down = sites.filter(s => !s.up);
+  const sugg = inv.suggestions || [];
+  const fixed = (f.fixed || []).reduce((a, x) => a + x.usd, 0);
+  const doLast = inv.doInvoices?.[0];
+  const kids = [];
+
+  // Summary line
+  kids.push(h('div', { class: 'card fsum' },
+    h('div', { class: 'big ' + (down.length ? 'bad' : 'ok') }, !sites.length ? "Checking sites…" : down.length ? `${down.length} down: ${down.map(s => s.name).join(", ")}` : `All ${sites.length} sites up`),
+    h('div', { class: 'facts' },
+      fact('Monthly', [doLast ? `DigitalOcean ${usd(doLast.usd)}` : null, fixed ? `subscriptions ${usd(fixed)}` : null, 'Google Cloud: no billing export'].filter(Boolean).join(' · ')),
+      inv.doMonthToDate != null ? fact('DO this month', usd(inv.doMonthToDate) + ' so far') : null,
+      fact("Inventory", fresh ? `${res.filter(r => !r.infra).length} things · ${ago(inv.at)}` : 'taking inventory…',
+        h('button', { class: 'icon', title: 'Take inventory again now', onclick: async e => { e.target.disabled = true; await postJSON('/api/fleet/refresh', {}); toastOK('Taking inventory: takes a minute.'); setTimeout(loadFleet, 60000); } }, '↻'))),
+    f.missing?.length ? h('div', { class: 'dim', style: 'color:var(--warn)' }, 'Not connected: ' + f.missing.join(', ')) : null,
+    inv.errors?.length ? h('details', { class: 'dim' }, h('summary', {}, `${inv.errors.length} thing(s) couldn’t be read`), h('ul', {}, inv.errors.map(e => h('li', {}, e)))) : null));
+
+  // Suggestions
+  if (sugg.length) {
+    const order = { kill: 0, trim: 1, check: 2 };
+    kids.push(h('h2', {}, 'Worth a look'), h('div', { class: 'card sugg' },
+      [...sugg].sort((a, b) => order[a.level] - order[b.level]).map(s => h('div', { class: 's' },
+        h('span', { class: 'lvl ' + s.level }, s.level), h('div', {}, h('div', {}, s.text), s.why ? h('div', { class: 'dim' }, s.why) : null)))));
+  }
+
+  // Sites
+  kids.push(h('h2', {}, 'Sites ', h('span', { class: 'dim', style: 'text-transform:none;letter-spacing:0' }, 'checked every minute from home')),
+    h('div', { class: 'card' }, h('table', { class: 'net fleet' },
+      h('thead', {}, h('tr', {}, ['Site', 'Last 24 hours', 'Up 24h / 7d', 'Speed', 'Runs on', 'Cert'].map(t => h('th', {}, t)))),
+      h('tbody', {}, sites.map(s => h('tr', { class: s.up ? '' : 'down' },
+        h('td', {}, h('a', { href: s.url, target: '_blank', rel: 'noopener' }, s.name),
+          h('div', { class: 'dim', style: s.up ? '' : 'color:var(--bad)' }, s.up ? (s.status ? 'HTTP ' + s.status : '') : (s.error || 'HTTP ' + s.status) + ' · since ' + clock(s.since))),
+        h('td', {}, h('div', { class: 'strip' }, s.strip.map(v => h('i', { class: v < 0 ? 'none' : v >= 100 ? 'ok' : v >= 90 ? 'slow' : 'down', title: v < 0 ? 'no data' : v + '% up' })))),
+        h('td', { class: 'mono' }, s.up24 != null ? pct(s.up24) : '—', ' / ', s.up7 != null ? pct(s.up7) : '—'),
+        h('td', { class: 'mono' }, s.p50 ? s.p50 + ' ms' : '—'),
+        h('td', {}, s.domain?.host || '', s.domain?.target ? h('div', { class: 'dim' }, s.domain.target) : null),
+        h('td', { class: 'mono', style: s.certDays != null && s.certDays < 14 ? 'color:var(--warn)' : '' }, s.certDays != null ? s.certDays + 'd' : '—')))))));
+
+  // Domains
+  kids.push(h('h2', {}, 'Domains'), h('div', { class: 'card' }, h('table', { class: 'net' },
+    h('thead', {}, h('tr', {}, ['Domain', 'Website', 'DNS', 'Email', 'Renews'].map(t => h('th', {}, t)))),
+    h('tbody', {}, (f.domains || []).map(d => {
+      const left = d.expires ? daysTo(d.expires) : null;
+      return h('tr', {},
+        h('td', {}, d.name),
+        h('td', {}, d.host || h('span', { class: 'dim' }, 'none'), d.target ? h('div', { class: 'dim' }, d.target) : null),
+        h('td', { class: 'dim' }, d.dns || ''),
+        h('td', {}, d.mail ? '✓' : ''),
+        h('td', { class: 'mono', style: left != null && left < 60 ? 'color:var(--warn)' : '' }, d.expires || '?', h('div', { class: 'dim' }, (d.registrar || '') + (d.rdapSource === 'registry' ? ' · registry' : ''))));
+    })))));
+
+  // Inventory, grouped by provider and project
+  const groups = {};
+  for (const r of res) (groups[r.provider + (r.project ? ' · ' + r.project : '')] ||= []).push(r);
+  const projects = Object.fromEntries((inv.projects || []).map(p => [p.id, p]));
+  kids.push(h('h2', {}, 'Inventory ', h('label', { class: 'dim', style: 'text-transform:none;letter-spacing:0;margin-left:8px' },
+    h('input', { type: 'checkbox', checked: showInfra, onchange: e => { showInfra = e.target.checked; renderFleet(); } }), ' show platform leftovers')));
+  const cards = [];
+  for (const [name, rs] of Object.entries(groups)) {
+    const p = projects[name.split(' · ')[1]];
+    const shown = rs.filter(r => showInfra || !r.infra);
+    const total = rs.reduce((a, r) => a + (r.usd || 0), 0);
+    cards.push(h('div', { class: 'card inv' },
+      h('div', { class: 'k' }, h('b', {}, name), h('span', { class: 'dim' },
+        p ? [billWord(p), p.created ? ' · since ' + p.created.slice(0, 7) : ''].join('') : '', total ? ` · ${usd(total)}/mo` : '')),
+      shown.length ? h('table', { class: 'net' }, h('tbody', {}, shown.map(r => h('tr', { class: r.infra ? 'infra' : '' },
+        h('td', { class: 'dim', style: 'width:110px' }, r.kind),
+        h('td', {}, r.url ? h('a', { href: r.url, target: '_blank', rel: 'noopener' }, r.name) : r.name, r.detail ? h('div', { class: 'dim' }, r.detail) : null),
+        h('td', { class: 'dim' }, [r.state, r.usage].filter(Boolean).join(' · ')),
+        h('td', { class: 'mono', style: 'text-align:right' }, r.usd ? usd(r.usd) + '/mo' : ''))))) : h('div', { class: 'dim', style: 'padding:8px 12px' }, (p?.notable?.length ? 'Nothing running, but uses: ' + p.notable.join(', ') : 'Nothing you made: only what Google creates by default.'))));
+  }
+  for (const p of inv.projects || []) if (!groups['Google Cloud · ' + p.id]) cards.push(h('div', { class: 'card inv' },
+    h('div', { class: 'k' }, h('b', {}, 'Google Cloud · ' + p.id), h("span", { class: "dim" }, billWord(p))),
+    h('div', { class: 'dim', style: 'padding:8px 12px' }, p.notable?.length ? `Nothing running, but uses: ${p.notable.join(", ")}` : `Empty: ${p.apis} API(s) turned on, nothing running.`)));
+  if (f.fixed?.length) cards.push(h('div', { class: 'card inv' }, h('div', { class: 'k' }, h('b', {}, 'Subscriptions'), h('span', { class: 'dim' }, usd(fixed) + '/mo')),
+    h('table', { class: 'net' }, h('tbody', {}, f.fixed.map(x => h('tr', {}, h('td', {}, x.name, x.note ? h('div', { class: 'dim' }, x.note) : null), h('td', { class: 'mono', style: 'text-align:right' }, usd(x.usd) + '/mo')))))));
+  kids.push(h('div', { class: 'invgrid' }, cards));
+  root.replaceChildren(...kids);
+}
+const billWord = p => !p.billingKnown ? "" : p.billed ? (p.billing || "billed") : "no billing";
+let showInfra = false;
+const fact = (k, v, extra) => h('div', {}, h('div', { class: 'dim' }, k), h('div', {}, v, extra ? ' ' : '', extra || ''));
+
 function showView() {
-  const net = location.hash === '#network';
-  $('main').hidden = net; $('#netview').hidden = !net;
-  $$('nav a').forEach(a => a.classList.toggle('on', (a.dataset.view === 'network') === net));
-  if (net) { Object.keys(streams).forEach(stopLive); loadNetwork(false); loadHealth(); }
+  const view = location.hash === '#network' ? 'network' : location.hash === '#fleet' ? 'fleet' : 'home';
+  $('main').hidden = view !== 'home'; $('#netview').hidden = view !== 'network'; $('#fleetview').hidden = view !== 'fleet';
+  $$('nav a').forEach(a => a.classList.toggle('on', a.dataset.view === view));
+  if (view !== 'home') Object.keys(streams).forEach(stopLive);
+  if (view === 'network') { loadNetwork(false); loadHealth(); }
+  if (view === 'fleet') loadFleet();
 }
 addEventListener('hashchange', showView);
 $('nav a[data-view="home"]').addEventListener('click', e => { e.preventDefault(); history.pushState(null, '', location.pathname); showView(); });
 
 (async () => {
   showView();
-  initPush();
+  if (!CAPTURE) initPush();
   await reloadEvents();
   await loadDevices();
   loadHome();
   connectStream();
   setInterval(() => { if (!document.hidden) loadDevices(); }, 60 * 1000);
   setInterval(() => { if (!document.hidden) loadHome(); }, 2 * 60 * 1000);
-  setInterval(() => { if (!document.hidden && location.hash === '#network') loadHealth(); }, 60 * 1000);
+  setInterval(() => { if (!document.hidden && location.hash === '#network') loadHealth(); }, 60 * 1000);  setInterval(() => { if (!document.hidden && location.hash === '#fleet') loadFleet(); }, 60 * 1000);
 })();
 </script>
 </body>

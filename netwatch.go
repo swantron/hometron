@@ -51,11 +51,12 @@ type NetWatch struct {
 	devices  map[string]*watched // mac -> dropout tracking
 	scans    int
 
-	outdoor  func() *float64 // outside temperature, if weather is set up
-	meshPath string          // <state>/mesh.json: Wi-Fi point drop log
-	meshLog  []MeshDrop      // newest first
-	meshFrom time.Time       // when point watching began; availability counts from here
-	meshDown map[string]*meshState
+	outdoor    func() *float64   // outside temperature, if weather is set up
+	meshPath   string            // <state>/mesh.json: Wi-Fi point drop log
+	meshLog    []MeshDrop        // newest first
+	meshFrom   time.Time         // when point watching began; availability counts from here
+	savedUnits map[string]string // units as last written to mesh.json
+	meshDown   map[string]*meshState
 }
 
 type meshState struct {
@@ -156,6 +157,10 @@ func newNetWatch(stateDir string, lan *Network, events *Events) *NetWatch {
 		json.Unmarshal(b, &saved)
 	}
 	w.meshLog, w.meshFrom = saved.Drops, saved.Since
+	w.savedUnits = saved.Units
+	for ip, name := range saved.Units {
+		w.routers[ip] = &RouterInfo{IP: ip, Name: name}
+	}
 	if w.meshFrom.IsZero() {
 		w.meshFrom = time.Now()
 		w.saveMesh()
@@ -252,6 +257,9 @@ func (w *NetWatch) tick(ctx context.Context, now time.Time) {
 		}
 	}()
 	wg.Wait()
+	if ctx.Err() != nil {
+		return // shutting down: the probes were cut short, not lost
+	}
 	if s.Internet != nil && !s.Internet.ok() { // 1.1.1.1 alone isn't the internet
 		if h := w.ping(ctx, "8.8.8.8"); h.ok() {
 			s.Internet = &h
@@ -402,13 +410,15 @@ func Diagnose(s NetSample) (ok bool, words string) {
 }
 
 type meshFile struct {
-	Since time.Time  `json:"since"`
-	Drops []MeshDrop `json:"drops"`
+	Since time.Time         `json:"since"`
+	Drops []MeshDrop        `json:"drops"`
+	Units map[string]string `json:"units,omitempty"` // ip -> name: the points to watch from the first minute after a restart
 }
 
 func (w *NetWatch) saveMesh() {
 	w.mu.Lock()
-	b, _ := json.MarshalIndent(meshFile{Since: w.meshFrom, Drops: w.meshLog}, "", " ")
+	w.savedUnits = w.unitList()
+	b, _ := json.MarshalIndent(meshFile{Since: w.meshFrom, Drops: w.meshLog, Units: w.unitList()}, "", " ")
 	w.mu.Unlock()
 	if w.meshPath != "" {
 		os.WriteFile(w.meshPath, b, 0o600)
@@ -487,6 +497,8 @@ func (w *NetWatch) checkRouters(ctx context.Context, gw string, now time.Time) {
 			r.Name = titleCase(names[ip])
 		case r.Root:
 			r.Name = "Main Wifi"
+		case r.Name != "" && !strings.HasPrefix(r.Name, "Wifi point "):
+			// keep the name from the last sweep (or mesh.json) until the next one
 		default:
 			r.Name = "Wifi point " + ip
 		}
@@ -501,7 +513,20 @@ func (w *NetWatch) checkRouters(ctx context.Context, gw string, now time.Time) {
 	}
 	w.mu.Lock()
 	w.routerAt = now
+	changed := fmt.Sprint(w.unitList()) != fmt.Sprint(w.savedUnits)
 	w.mu.Unlock()
+	if changed {
+		w.saveMesh()
+	}
+}
+
+// unitList is the known Wi-Fi units by ip. Holds w.mu.
+func (w *NetWatch) unitList() map[string]string {
+	m := map[string]string{}
+	for ip, r := range w.routers {
+		m[ip] = r.Name
+	}
+	return m
 }
 
 type gwifiStatus struct {

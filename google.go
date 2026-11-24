@@ -112,6 +112,12 @@ func (e *APIError) Error() string { return fmt.Sprintf("google api %d: %s", e.St
 
 // Do sends a JSON request with a bearer token and decodes a JSON response into out (if non-nil).
 func (g *Google) Do(ctx context.Context, method, rawURL string, body, out any) error {
+	return g.DoAs(ctx, method, rawURL, "", body, out)
+}
+
+// DoAs is Do with the quota and billing for the call charged to userProject (when set)
+// instead of the OAuth client's own project.
+func (g *Google) DoAs(ctx context.Context, method, rawURL, userProject string, body, out any) error {
 	tok, err := g.Token(ctx)
 	if err != nil {
 		return err
@@ -129,6 +135,9 @@ func (g *Google) Do(ctx context.Context, method, rawURL string, body, out any) e
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
+	if userProject != "" {
+		req.Header.Set("X-Goog-User-Project", userProject)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -145,4 +154,23 @@ func (g *Google) Do(ctx context.Context, method, rawURL string, body, out any) e
 		return json.Unmarshal(b, out)
 	}
 	return nil
+}
+
+// loadGoogleToken is a second sign-in with the same OAuth client, kept in its own file
+// (e.g. fleet-token.json: read-only Cloud access, separate from the Nest token).
+func loadGoogleToken(stateDir, file string) (*Google, error) {
+	var c Credentials
+	if err := readJSON(filepath.Join(stateDir, "credentials.json"), &c); err != nil {
+		return nil, err
+	}
+	var tok struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := readJSON(filepath.Join(stateDir, file), &tok); err != nil {
+		return nil, err
+	}
+	if tok.RefreshToken == "" {
+		return nil, fmt.Errorf("%s has no refresh_token", file)
+	}
+	return &Google{creds: c, refreshToken: tok.RefreshToken, http: &http.Client{Timeout: 30 * time.Second}}, nil
 }

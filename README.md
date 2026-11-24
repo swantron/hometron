@@ -135,7 +135,41 @@ Each is a file in `~/nest/` (chmod 600). Leave it out and that feature stays off
   once. It never stores the Samsung password. When that session expires, the fridge card shows
   **Sign in**, which opens Chrome on the server's screen for a Screen Sharing sign-in. Only tokens it
   created (named `hometron-auto-…`) are ever deleted.
+
+  SmartThings' own sign-in lasts 2 hours. After that it quietly signs in again through Samsung's
+  login, which idles out after about 30 minutes. So every 10 minutes hometron also runs the site's
+  sign-in redirect to keep Samsung's side active. The log says whether that round trip is working
+  (`Samsung sign-in alive` or `has lapsed`).
+- **Camera pictures with no tab open.** If Google Chrome is installed on the server, hometron keeps
+  the dashboard open in a headless Chrome (`~/nest/capture-browser`, loopback only, no sign-ins).
+  It grabs a picture when a person shows up or the doorbell rings. On motion, it refreshes a camera's
+  still if that still is over 10 minutes old. Otherwise it keeps every still under an hour old. Each
+  grab is a short live stream. To turn it off, `touch ~/nest/capture-off` and restart.
 - **`printer.json`:** only if the printer isn't found automatically: `{"host": "192.168.1.20"}`.
+- **`fleet.json`: the Fleet page, which covers sites, domains and cloud inventory.**
+  ```json
+  {"gcpQuotaProject": "my-project",
+   "domains": [{"name": "example.com", "expires": "2027-11-08", "registrar": "Squarespace"}],
+   "checks": ["https://status.example.com/health"],
+   "fixed": [{"name": "Claude Pro", "usd": 20}]}
+  ```
+  Every domain that has a website, plus each extra check, is fetched once a minute. Minutes when the
+  home internet is down aren't counted. A site that fails 3 minutes in a row raises a `fleet` alert,
+  and so does one coming back, a TLS certificate under 14 days, or a registration under 30 days.
+  Registration dates come from the public registry (RDAP), and the config dates are the fallback.
+
+  The inventory runs every 6 hours, read-only:
+  - `digitalocean.json` `{"token": "..."}`: a read-only token. It lists apps, droplets, volumes,
+    snapshots, databases and IPs, with month-to-date spend and invoices.
+  - `fleet-token.json`: a Google sign-in with `cloud-platform.read-only`, made with the same OAuth
+    client (`fleet-exchange.sh`). It lists every project, plus Cloud Run (with 30-day request
+    counts), VMs (7-day CPU), disks, IPs, functions, image repos, Firebase sites and buckets.
+
+  Each Google call is charged to the project it reads. The project list and billing lookups go to
+  `gcpQuotaProject`, which needs the Cloud Resource Manager and Cloud Billing APIs turned on.
+  Anything that appears or disappears between inventories posts an event. The **Worth a look** list
+  flags empty projects, unattached disks and volumes, unused IPs, Cloud Run with no traffic, oversized
+  App Platform plans, image repos over 1 GB, and extra e2-micro VMs beyond the free tier.
 
 ## HTTPS (needed for alerts and installing it as an app)
 

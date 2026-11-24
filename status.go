@@ -25,6 +25,7 @@ type Printer struct {
 	host string // fixed host from <state>/printer.json {"host": "..."}, or "" to find one
 	lan  *Network
 	http *http.Client
+	seen string // <state>/printer-seen: where it was last found, to try first after a restart
 
 	mu   sync.Mutex
 	last PrinterView
@@ -47,7 +48,10 @@ type Marker struct {
 }
 
 func newPrinter(stateDir string, lan *Network) *Printer {
-	p := &Printer{lan: lan, http: &http.Client{Timeout: 8 * time.Second}}
+	p := &Printer{lan: lan, http: &http.Client{Timeout: 8 * time.Second}, seen: filepath.Join(stateDir, "printer-seen")}
+	if b, err := os.ReadFile(p.seen); err == nil {
+		p.last.Host = strings.TrimSpace(string(b))
+	}
 	if b, err := os.ReadFile(filepath.Join(stateDir, "printer.json")); err == nil {
 		var c struct{ Host string }
 		if json.Unmarshal(b, &c) == nil {
@@ -97,6 +101,9 @@ func (p *Printer) poll(ctx context.Context) bool {
 		if err == nil {
 			v.Host, v.At = h, time.Now()
 			p.mu.Lock()
+			if p.last.Host != h {
+				os.WriteFile(p.seen, []byte(h), 0o600)
+			}
 			p.last = v
 			p.mu.Unlock()
 			return true
@@ -358,6 +365,9 @@ func (in *Internet) check(ctx context.Context, now time.Time) {
 		}
 	}
 	lat := int(time.Since(start).Milliseconds())
+	if ctx.Err() != nil {
+		return // shutting down, not offline
+	}
 
 	in.mu.Lock()
 	was := in.state.Up

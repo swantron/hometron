@@ -115,6 +115,12 @@ func main() {
 		go home.SmartThings.Run(ctx)
 		providers = append(providers, home.SmartThings)
 	}
+	if home.Fleet, err = loadFleet(*state, home.Internet, events); err != nil {
+		log.Fatalf("fleet: %v", err)
+	}
+	if home.Fleet != nil {
+		go home.Fleet.Run(ctx)
+	}
 	if home.Calendar, err = loadCalendar(*state, events); err != nil {
 		log.Fatalf("calendar: %v", err)
 	}
@@ -149,6 +155,10 @@ func main() {
 		}
 	}()
 
+	if cap := newCapture(*state, *listen); cap != nil {
+		go cap.Run(ctx)
+	}
+
 	mediaDir := filepath.Join(*state, "events")
 	srv := &http.Server{Handler: routes(providers, events, lan, newSnapshots(mediaDir), push, home, mediaDir)}
 	go func() {
@@ -178,6 +188,7 @@ func routes(providers []Provider, events *Events, lan *Network, snaps *Snapshots
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := webFS.ReadFile("web/index.html")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(b)
 	})
 
@@ -430,7 +441,8 @@ type deviceView struct {
 	Ice      string       `json:"ice,omitempty"`      // ice makers, summarized
 	KWhMonth *float64     `json:"kwhMonth,omitempty"` // energy used this month
 	KWhLast  *float64     `json:"kwhLast,omitempty"`
-	Notes    []string     `json:"notes,omitempty"` // defrosting, Power Freeze on, ...
+	Notes    []string     `json:"notes,omitempty"`    // defrosting, Power Freeze on, ...
+	SignInBy *time.Time   `json:"signInBy,omitempty"` // when the current token runs out (sign in before then)
 
 	// thermostat (and garage)
 	Online   bool     `json:"online,omitempty"`

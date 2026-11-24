@@ -258,7 +258,9 @@ func (c *cdp) openPage(ctx context.Context, url string, background bool) (string
 		var r evalResult
 		if err := c.call(ctx, a.SessionID, "Runtime.evaluate", map[string]any{"expression": "location.href + ' ' + document.readyState", "returnByValue": true}, &r); err == nil {
 			s, _ := r.Result.Value.(string)
-			if strings.HasSuffix(s, " complete") && s == last {
+			// A new tab reports a "complete" about:blank before navigation even starts.
+			navigating := strings.HasPrefix(s, "about:blank") && !strings.HasPrefix(url, "about:blank")
+			if !navigating && strings.HasSuffix(s, " complete") && s == last {
 				break
 			}
 			last = s
@@ -303,7 +305,8 @@ func (c *cdp) eval(ctx context.Context, session, js string) (any, error) {
 // stBrowser owns (or reattaches to) the one Chrome holding the SmartThings session.
 type stBrowser struct {
 	bin, profile, base string
-	headless           bool // tests only: the real one needs a window to sign in
+	headless           bool     // tests only: the real one needs a window to sign in
+	extra              []string // more Chrome flags
 
 	mu sync.Mutex // one task in the browser at a time
 }
@@ -334,6 +337,7 @@ func (b *stBrowser) connect(ctx context.Context, start bool) (*cdp, error) {
 	if b.headless {
 		args = append(args, "--headless=new")
 	}
+	args = append(args, b.extra...)
 	args = append(args, "about:blank")
 	cmd := exec.Command(b.bin, args...)
 	// Its own session, so it outlives hometron restarts (the launchd job also sets
@@ -370,9 +374,9 @@ func (b *stBrowser) attach(ctx context.Context) (*cdp, error) {
 
 // checkJS: are we on the tokens page with a working session?
 const checkJS = `(async () => {
-  if (!location.pathname.startsWith('/tokens')) return false;
+  if (!location.pathname.startsWith('/tokens')) return {ok: false, why: 'landed on ' + location.host + location.pathname};
   const r = await fetch('/api/tokens', {credentials: 'same-origin', headers: {'Accept': 'application/json'}});
-  return r.ok;
+  return {ok: r.ok, why: 'token list: HTTP ' + r.status};
 })()`
 
 // renewJS runs inside account.smartthings.com/tokens: it creates a token the way the page's
@@ -410,16 +414,33 @@ var stScopes = []string{"r:devices:*", "r:locations:*"}
 // closes the tab. If the browser isn't running, that's a sign-in problem: a fresh Chrome
 // has no session.
 func (b *stBrowser) inTab(ctx context.Context, js string) (any, error) {
+	var out any
+	err := b.withBrowser(ctx, func(c *cdp) error {
+		v, err := c.visit(ctx, b.base+"/tokens", js)
+		out = v
+		return err
+	})
+	return out, err
+}
+
+// withBrowser runs fn against the running session browser, one task at a time.
+func (b *stBrowser) withBrowser(ctx context.Context, fn func(*cdp) error) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	c, err := b.connect(ctx, false)
 	if err != nil {
-		return nil, errNeedsSignIn
+		// No session browser running (e.g. after a reboot): only a sign-in fixes that.
+		return fmt.Errorf("%w (browser not running: %v)", errNeedsSignIn, err)
 	}
 	defer c.disconnect()
-	tab, session, err := c.openPage(ctx, b.base+"/tokens", true)
+	return fn(c)
+}
+
+// visit loads url in a background tab, runs js there, and closes the tab.
+func (c *cdp) visit(ctx context.Context, url, js string) (any, error) {
+	tab, session, err := c.openPage(ctx, url, true)
 	if tab != "" {
 		defer c.closeTab(tab)
 	}
@@ -429,17 +450,63 @@ func (b *stBrowser) inTab(ctx context.Context, js string) (any, error) {
 	return c.eval(ctx, session, js)
 }
 
-// KeepAlive reloads the tokens page so neither Samsung's nor SmartThings' session idles
-// out. Returns errNeedsSignIn if it already has.
-func (b *stBrowser) KeepAlive(ctx context.Context) error {
-	v, err := b.inTab(ctx, checkJS)
-	if err != nil {
-		return err
+// Alive is what a keep-alive visit found.
+type Alive struct {
+	Ends    time.Time // when SmartThings' own 2-hour sign-in runs out (zero if unknown)
+	Renewed bool      // the sign-in round trip came back signed in (Samsung's login is alive)
+	Landed  string    // where the round trip ended up
+}
+
+// KeepAlive checks the session and keeps it going. SmartThings' own sign-in (the _JTKN
+// cookie) only lasts 2 hours; after that the site quietly signs in again through Samsung's
+// login, which works only if Samsung's session hasn't idled out meanwhile. Reloading the
+// tokens page touches only SmartThings, so each visit also goes through the site's sign-in
+// redirect: that touches Samsung's session and, when it's alive, refreshes SmartThings'.
+// Returns errNeedsSignIn once the tokens page itself wants a sign-in.
+func (b *stBrowser) KeepAlive(ctx context.Context) (Alive, error) {
+	var a Alive
+	err := b.withBrowser(ctx, func(c *cdp) error {
+		v, err := c.visit(ctx, b.base+"/tokens", checkJS)
+		if err != nil {
+			return err
+		}
+		res, _ := v.(map[string]any)
+		if res["ok"] != true {
+			return fmt.Errorf("%w (%v)", errNeedsSignIn, res["why"])
+		}
+		if v, err := c.visit(ctx, b.base+"/login-redirect", "location.host + location.pathname"); err == nil {
+			a.Landed, _ = v.(string)
+			base, _ := url.Parse(b.base)
+			a.Renewed = strings.HasPrefix(a.Landed, base.Host)
+		}
+		a.Ends = c.jwtExpiry(ctx, "_JTKN")
+		return nil
+	})
+	return a, err
+}
+
+// jwtExpiry reads the expiry claim of a JWT cookie (the value itself never leaves here).
+func (c *cdp) jwtExpiry(ctx context.Context, name string) time.Time {
+	var r struct {
+		Cookies []struct{ Name, Value string } `json:"cookies"`
 	}
-	if v != true {
-		return errNeedsSignIn
+	if c.call(ctx, "", "Storage.getCookies", map[string]any{}, &r) != nil {
+		return time.Time{}
 	}
-	return nil
+	for _, k := range r.Cookies {
+		p := strings.Split(k.Value, ".")
+		if k.Name != name || len(p) != 3 {
+			continue
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(p[1], "="))
+		var claims struct {
+			Exp float64 `json:"exp"`
+		}
+		if err == nil && json.Unmarshal(raw, &claims) == nil && claims.Exp > 0 {
+			return time.Unix(int64(claims.Exp), 0)
+		}
+	}
+	return time.Time{}
 }
 
 // Renew returns a fresh token, or errNeedsSignIn.

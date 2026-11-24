@@ -19,6 +19,7 @@ type fakeAccount struct {
 	mu     sync.Mutex
 	tokens []map[string]any
 	n      int
+	lapsed bool // the "Samsung" side of the sign-in has expired
 }
 
 func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -41,6 +42,15 @@ func (f *fakeAccount) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.SetCookie(w, &http.Cookie{Name: "XSRF-TOKEN", Value: "x123", Path: "/"})
 		fmt.Fprint(w, "<html><body>tokens</body></html>")
+	case r.URL.Path == "/login-redirect":
+		// The sign-in round trip: straight back when "Samsung" still knows us, else its login page.
+		if signedIn && !f.lapsed {
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "http://localhost:"+strings.Split(r.Host, ":")[1]+"/login-page", http.StatusFound)
+	case r.URL.Path == "/":
+		fmt.Fprint(w, "<html><body>home</body></html>")
 	case r.URL.Path == "/login-page":
 		fmt.Fprint(w, "<html><body>please log in</body></html>")
 	case strings.HasPrefix(r.URL.Path, "/api/tokens"):
@@ -103,7 +113,7 @@ func TestRenewPATWithChrome(t *testing.T) {
 	if err := b.ShowSignIn(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.KeepAlive(ctx); !errors.Is(err, errNeedsSignIn) {
+	if _, err := b.KeepAlive(ctx); !errors.Is(err, errNeedsSignIn) {
 		t.Fatalf("before signing in: %v", err)
 	}
 	// "Sign in" in the running browser: a session-only cookie, like SmartThings'.
@@ -114,8 +124,15 @@ func TestRenewPATWithChrome(t *testing.T) {
 	tab, _, _ := c.openPage(ctx, srv.URL+"/login", false)
 	c.closeTab(tab)
 	c.disconnect()
-	if err := b.KeepAlive(ctx); err != nil {
-		t.Fatalf("after signing in: %v", err)
+	if a, err := b.KeepAlive(ctx); err != nil || !a.Renewed {
+		t.Fatalf("after signing in: %+v, %v", a, err)
+	}
+	// Samsung's side lapses: the session still works for now, but the round trip says so.
+	f.mu.Lock()
+	f.lapsed = true
+	f.mu.Unlock()
+	if a, err := b.KeepAlive(ctx); err != nil || a.Renewed || !strings.HasPrefix(a.Landed, "localhost:") {
+		t.Fatalf("after the lapse: %+v, %v", a, err)
 	}
 	tok1, err := b.Renew(ctx)
 	if err != nil || tok1 != "tok-1" {

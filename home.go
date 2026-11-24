@@ -19,6 +19,7 @@ type Home struct {
 	Net      *NetWatch
 
 	SmartThings *SmartThings
+	Fleet       *Fleet
 }
 
 type homeView struct {
@@ -189,6 +190,22 @@ func (h *Home) routes(mux *http.ServeMux) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+
+	mux.HandleFunc("GET /api/fleet", func(w http.ResponseWriter, r *http.Request) {
+		if h == nil || h.Fleet == nil {
+			writeJSON(w, map[string]any{"setup": true})
+			return
+		}
+		writeJSON(w, h.Fleet.View())
+	})
+	mux.HandleFunc("POST /api/fleet/refresh", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) || h == nil || h.Fleet == nil {
+			http.Error(w, "no", http.StatusBadRequest)
+			return
+		}
+		h.Fleet.Refresh()
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 

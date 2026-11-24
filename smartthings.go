@@ -60,6 +60,8 @@ type SmartThings struct {
 	renewErr  error
 	lastTry   time.Time
 	aliveAt   time.Time // last keep-alive visit
+	aliveMiss int       // keep-alive failures in a row
+	alive     Alive     // what the last good keep-alive found
 	api       string    // stAPI, or a test server
 	http      *http.Client
 	events    *Events
@@ -140,7 +142,9 @@ func (st *SmartThings) maybeRenew(ctx context.Context, now time.Time) {
 	if st.renewErr != nil && now.Sub(st.lastTry) < 10*time.Minute {
 		due = false
 	}
-	alive := !due && now.Sub(st.aliveAt) >= 10*time.Minute && !errors.Is(st.renewErr, errNeedsSignIn)
+	// Keep checking even after a failure: a blip clears itself, and a real sign-out keeps
+	// saying so. Two misses in a row before the card asks for a sign-in.
+	alive := !due && now.Sub(st.aliveAt) >= 10*time.Minute
 	if due {
 		st.lastTry = now
 	}
@@ -150,11 +154,24 @@ func (st *SmartThings) maybeRenew(ctx context.Context, now time.Time) {
 	st.authMu.Unlock()
 
 	if alive {
-		if err := st.browser.KeepAlive(ctx); err != nil {
-			log.Printf("smartthings: keep-alive: %v", err)
-			st.authMu.Lock()
+		alive, err := st.browser.KeepAlive(ctx)
+		st.authMu.Lock()
+		defer st.authMu.Unlock()
+		if err == nil {
+			st.noteAlive(alive)
+			st.aliveMiss = 0
+			if errors.Is(st.renewErr, errNeedsSignIn) {
+				st.renewErr = nil // session is fine after all
+				log.Printf("smartthings: session OK again")
+			}
+			return
+		}
+		st.aliveMiss++
+		log.Printf("smartthings: keep-alive miss %d: %v", st.aliveMiss, err)
+		if st.aliveMiss >= 2 || !errors.Is(err, errNeedsSignIn) {
 			st.renewErr, st.lastTry = err, now
-			st.authMu.Unlock()
+		} else {
+			st.aliveAt = now.Add(-9 * time.Minute) // check again in a minute
 		}
 		return
 	}
@@ -203,12 +220,13 @@ func (st *SmartThings) SignIn() error {
 		for time.Now().Before(deadline) {
 			time.Sleep(15 * time.Second)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			err := st.browser.KeepAlive(ctx)
+			alive, err := st.browser.KeepAlive(ctx)
 			cancel()
 			if err == nil {
 				log.Printf("smartthings: signed in")
 				st.authMu.Lock()
 				st.signingIn, st.needRenew, st.renewErr = false, true, nil
+				st.alive = alive
 				st.authMu.Unlock()
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 				st.maybeRenew(ctx, time.Now())
@@ -672,7 +690,7 @@ type FridgePart struct {
 func (st *SmartThings) Devices(ctx context.Context) ([]deviceView, error) {
 	connected := st.Connected() // before st.mu: a refresh in progress holds authMu
 	st.authMu.Lock()
-	renewErr, signingIn, auto := st.renewErr, st.signingIn, st.cfg.Auto
+	renewErr, signingIn, auto, renewedAt := st.renewErr, st.signingIn, st.cfg.Auto, st.cfg.RenewedAt
 	st.authMu.Unlock()
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -698,6 +716,10 @@ func (st *SmartThings) Devices(ctx context.Context) ([]deviceView, error) {
 		}
 		if auto && errors.Is(renewErr, errNeedsSignIn) {
 			v.Run = "needs-signin" // still working on the current token; sign in before it expires
+			if !renewedAt.IsZero() {
+				by := renewedAt.Add(24 * time.Hour)
+				v.SignInBy = &by
+			}
 		}
 		if renewErr != nil && !errors.Is(renewErr, errNeedsSignIn) {
 			v.Problem = strings.TrimSpace(v.Problem + " · token renewal: " + renewErr.Error())
@@ -743,4 +765,16 @@ func (st *SmartThings) Owns(_ context.Context, id string) bool { return strings.
 
 func (st *SmartThings) Command(context.Context, string, string, map[string]any) (json.RawMessage, error) {
 	return nil, errNotAllowed // read-only: nobody needs to change fridge settings from here
+}
+
+// noteAlive logs changes in how the session is holding up. Holds authMu.
+func (st *SmartThings) noteAlive(a Alive) {
+	if a.Renewed != st.alive.Renewed || st.alive.Landed == "" {
+		if a.Renewed {
+			log.Printf("smartthings: Samsung sign-in alive (session until %s)", a.Ends.Format("15:04"))
+		} else {
+			log.Printf("smartthings: Samsung sign-in has lapsed (round trip landed on %s); the SmartThings session ends %s", a.Landed, a.Ends.Format("15:04"))
+		}
+	}
+	st.alive = a
 }
