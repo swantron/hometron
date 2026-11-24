@@ -20,6 +20,7 @@ type Home struct {
 
 	SmartThings *SmartThings
 	Fleet       *Fleet
+	Laundry     *Laundry
 }
 
 type homeView struct {
@@ -193,6 +194,15 @@ func (h *Home) routes(mux *http.ServeMux) {
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 
+	// "Moved it": the washer load was taken out, so skip the reminder.
+	mux.HandleFunc("POST /api/laundry/emptied", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) || h == nil || h.Laundry == nil {
+			http.Error(w, "no", http.StatusBadRequest)
+			return
+		}
+		h.Laundry.Emptied()
+		writeJSON(w, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /api/fleet", func(w http.ResponseWriter, r *http.Request) {
 		if h == nil || h.Fleet == nil {
 			writeJSON(w, map[string]any{"setup": true})

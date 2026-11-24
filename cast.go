@@ -37,6 +37,9 @@ type CastConfig struct {
 	Volume   float64  `json:"volume,omitempty"`
 	Say      string   `json:"say,omitempty"`
 	Port     int      `json:"port,omitempty"` // LAN port the speakers fetch audio from (default 8081)
+
+	// Laundry: say so when a washer load has sat for a while. Speakers default to the doorbell ones.
+	Laundry *LaundryReminderConfig `json:"laundry,omitempty"`
 }
 
 type Caster struct {
@@ -51,6 +54,7 @@ type Caster struct {
 	found   time.Time
 	ringing bool
 	last    time.Time
+	clip    []byte // the latest spoken message (Say)
 }
 
 func loadCaster(stateDir string, lan *Network) (*Caster, error) {
@@ -93,6 +97,13 @@ func (c *Caster) Serve(ctx context.Context) error {
 	mux.HandleFunc("GET /cast/chime.wav", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/wav")
 		http.ServeContent(w, r, "chime.wav", time.Time{}, bytes.NewReader(c.audio))
+	})
+	mux.HandleFunc("GET /cast/say.wav", func(w http.ResponseWriter, r *http.Request) {
+		c.mu.Lock()
+		clip := c.clip
+		c.mu.Unlock()
+		w.Header().Set("Content-Type", "audio/wav")
+		http.ServeContent(w, r, "say.wav", time.Time{}, bytes.NewReader(clip))
 	})
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { <-ctx.Done(); srv.Close() }()
@@ -168,6 +179,11 @@ func (c *Caster) Speakers(ctx context.Context) map[string]string {
 // resolve maps configured speaker names to IPs. Cast devices answer eureka_info with
 // their Home-app name, so we ask every Google device the network scan found.
 func (c *Caster) resolve(ctx context.Context) (map[string]string, []string) {
+	return c.resolveNames(ctx, c.cfg.Speakers)
+}
+
+// resolveNames finds speakers by their Google Home name.
+func (c *Caster) resolveNames(ctx context.Context, wanted []string) (map[string]string, []string) {
 	c.mu.Lock()
 	stale := time.Since(c.found) > 10*time.Minute
 	c.mu.Unlock()
@@ -180,7 +196,7 @@ func (c *Caster) resolve(ctx context.Context) (map[string]string, []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	got, missing := map[string]string{}, []string{}
-	for _, want := range c.cfg.Speakers {
+	for _, want := range wanted {
 		if ip, ok := c.names[strings.ToLower(want)]; ok {
 			got[want] = ip
 		} else {
@@ -590,4 +606,33 @@ func wav(pcm []byte) []byte {
 	w(uint32(len(pcm)))
 	b.Write(pcm)
 	return b.Bytes()
+}
+
+// Say plays a chime and then text on the named speakers (the doorbell's when none).
+func (c *Caster) Say(ctx context.Context, speakers []string, text string) error {
+	if c.mediaIP == "" {
+		return errors.New("audio isn't being served on the LAN")
+	}
+	if len(speakers) == 0 {
+		speakers = c.cfg.Speakers
+	}
+	ips, missing := c.resolveNames(ctx, speakers)
+	if len(ips) == 0 {
+		return fmt.Errorf("no speakers found (looked for %s)", strings.Join(missing, ", "))
+	}
+	clip := chimeWAV(text)
+	c.mu.Lock()
+	c.clip = clip
+	c.mu.Unlock()
+	url := fmt.Sprintf("http://%s/cast/say.wav?t=%d", net.JoinHostPort(c.mediaIP, fmt.Sprint(c.cfg.Port)), time.Now().UnixNano())
+	var errs []error
+	for name, ip := range ips {
+		if err := castPlay(ctx, ip, url, c.cfg.Volume); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+		}
+	}
+	if len(missing) > 0 {
+		errs = append(errs, fmt.Errorf("not found: %s", strings.Join(missing, ", ")))
+	}
+	return errors.Join(errs...)
 }

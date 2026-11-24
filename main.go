@@ -138,6 +138,26 @@ func main() {
 		}()
 	}
 
+	if laundry != nil {
+		home.Laundry = laundry
+		var rc LaundryReminderConfig
+		var say func(ctx context.Context, text string) error
+		if home.Caster != nil {
+			if c := home.Caster.cfg.Laundry; c != nil {
+				rc = *c
+			}
+			say = func(ctx context.Context, text string) error {
+				err := home.Caster.Say(ctx, rc.Speakers, text)
+				if err != nil && len(rc.Speakers) > 0 && strings.HasPrefix(err.Error(), "no speakers found") {
+					log.Printf("laundry: %v; using the doorbell speakers", err)
+					return home.Caster.Say(ctx, nil, text) // the doorbell's speakers
+				}
+				return err
+			}
+		}
+		laundry.SetReminder(rc, *state, say)
+	}
+
 	push, err := loadPush(*state)
 	if err != nil {
 		log.Fatalf("push: %v", err)
@@ -431,9 +451,10 @@ type deviceView struct {
 	Camera   string `json:"camera,omitempty"`   // label of the camera that watches it
 
 	// laundry
-	Run       string `json:"run,omitempty"`       // "Washing", "Done", "Off"
-	RemainMin *int   `json:"remainMin,omitempty"` // minutes left in the cycle
-	Active    bool   `json:"active,omitempty"`    // a load is in progress
+	Run       string     `json:"run,omitempty"`       // "Washing", "Done", "Off"
+	RemainMin *int       `json:"remainMin,omitempty"` // minutes left in the cycle
+	Active    bool       `json:"active,omitempty"`    // a load is in progress
+	WaitSince *time.Time `json:"waitSince,omitempty"` // washer: finished then, load not moved yet
 
 	// fridge
 	Parts    []FridgePart `json:"parts,omitempty"`

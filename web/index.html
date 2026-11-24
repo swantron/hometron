@@ -378,14 +378,22 @@ function laundryCard(l) {
   const done = l.run === 'Done' || l.run.startsWith('Done');
   const left = l.remainMin != null ? (l.remainMin >= 60 ? `${Math.floor(l.remainMin / 60)}h ${l.remainMin % 60}m left` : `${l.remainMin} min left`) : '';
   const finished = lastEvent(l.id, ['done']);
-  return h('div', { class: 'card laundry' + (l.active ? ' active' : '') + (done ? ' done' : ''), 'data-id': l.id },
+  const waiting = l.waitSince && !l.active; // washer done, load not moved yet
+  return h('div', { class: 'card laundry' + (l.active ? ' active' : '') + (done || waiting ? ' done' : ''), 'data-id': l.id },
     h('div', { class: 'glyph' }, l.room === 'dryer' ? '♨️' : '🧺'),
     h('div', { class: 'grow' },
-      h('div', {}, h('span', { class: 'state' }, l.run), left ? h('span', { class: 'dim' }, ' · ' + left) : null),
+      waiting ? h('div', {}, h('span', { class: 'state', style: 'color:var(--warn)' }, 'Load waiting'), h('span', { class: 'dim' }, ' · done ' + ago(l.waitSince)))
+        : h('div', {}, h('span', { class: 'state' }, l.run), left ? h('span', { class: 'dim' }, ' · ' + left) : null),
       h('div', { class: 'dim' }, l.label,
-        !l.active && finished ? ` · finished ${ago(finished.time)}` : '',
+        !l.active && !waiting && finished ? ` · finished ${ago(finished.time)}` : '',
+        waiting ? ' · move it to the dryer' : '',
         l.online ? '' : ' · not reporting'),
-      l.problem ? h('div', { class: 'problem dim', style: 'color:var(--bad)' }, l.problem) : null));
+      l.problem ? h('div', { class: 'problem dim', style: 'color:var(--bad)' }, l.problem) : null),
+    waiting ? h('button', { title: 'The load is out: skip the reminder', onclick: async e => {
+      e.target.disabled = true;
+      try { await postJSON('/api/laundry/emptied', {}); } catch (err) { toast(err.message); }
+      loadDevices();
+    } }, 'Moved it') : null);
 }
 
 function lastEvent(deviceId, kinds) {

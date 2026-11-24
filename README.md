@@ -91,6 +91,14 @@ Each is a file in `~/nest/` (chmod 600). Leave it out and that feature stays off
   `say` and `volume` are optional; the speaker's own volume is restored afterwards. The speakers fetch the
   sound from the server's LAN address on port 8081 (only the sound is served there). Casting stops
   whatever the speaker was playing. `GET /api/chime/speakers` lists what was found.
+
+  **Laundry reminder.** With `lg.json` set up as well, hometron announces a washer load that has sat
+  for an hour. Add `"laundry": {"speakers": ["Kitchen speaker"], "afterMin": 60, "quiet": "21:00-08:00"}`
+  to `cast.json`; every key is optional. LG reports no door sensor, and the washer switches itself
+  off soon after a cycle, so a load only counts as moved when the dryer starts, the washer starts
+  again, or someone taps **Moved it** on the washer card. During quiet hours it waits, then
+  announces in the morning if the load is still there. If the named speakers aren't found, the
+  doorbell speakers are used. The reminder also goes to Activity and push.
 - **`lg.json`: LG washer and dryer.** Create a personal access token at
   <https://connect-pat.lgthinq.com> (sign in with the LG ThinQ account the machines are in):
   ```json

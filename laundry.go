@@ -43,6 +43,11 @@ type Laundry struct {
 	mu       sync.Mutex
 	machines map[string]*machine // LG device id -> latest
 	err      string
+
+	remind   *LaundryReminderConfig
+	say      func(ctx context.Context, text string) error
+	wait     *LaundryWait
+	waitPath string
 }
 
 type machine struct {
@@ -141,6 +146,7 @@ func (l *Laundry) call(ctx context.Context, path string, out any) error {
 func (l *Laundry) Run(ctx context.Context) {
 	for {
 		busy := l.poll(ctx)
+		l.checkReminder(ctx, time.Now())
 		wait := 3 * time.Minute
 		if busy {
 			wait = time.Minute
@@ -240,6 +246,7 @@ func (l *Laundry) update(id, name, typ, state string, remain int, now time.Time)
 	// PAUSE keeps a load "in progress" so resuming doesn't look like a new one finishing.
 	m.active = !laundryIdle[state] || (wasActive && state == "PAUSE")
 	finished := wasActive && !m.active && (state == "END" || state == "POWER_OFF" || state == "WRINKLE_CARE")
+	l.onChange(m, !wasActive && m.active, finished, now)
 	l.mu.Unlock()
 
 	if finished && l.events != nil {
@@ -278,6 +285,10 @@ func (l *Laundry) Devices(ctx context.Context) ([]deviceView, error) {
 			v.RemainMin = &r
 		}
 		v.Active = m.active
+		if l.wait != nil && m.Type == "washer" && !m.active {
+			since := l.wait.Since
+			v.WaitSince = &since
+		}
 		if l.err != "" {
 			v.Problem = "LG isn't answering: " + l.err
 		}
@@ -325,4 +336,160 @@ func laundryWords(s, typ string) string {
 		return "Done · wrinkle care"
 	}
 	return strings.ToLower(strings.ReplaceAll(s, "_", " "))
+}
+
+// ---------- "the wash is still in the washer" ----------
+//
+// LG reports no door sensor, and LG washers switch themselves off a few minutes after a
+// cycle, so "off" doesn't mean "emptied". The load counts as moved when the dryer starts,
+// the washer starts again, or someone taps "Moved it" on the dashboard. Otherwise, after
+// an hour, the speakers say so, except during quiet hours, when it waits for morning.
+
+type LaundryReminderConfig struct {
+	Speakers []string `json:"speakers,omitempty"` // Google Home names; default: the doorbell speakers
+	AfterMin int      `json:"afterMin,omitempty"` // default 60
+	Quiet    string   `json:"quiet,omitempty"`    // "21:00-08:00" (the default): no announcements then
+}
+
+// LaundryWait is a washer load nobody has moved yet.
+type LaundryWait struct {
+	Since    time.Time `json:"since"`
+	Washer   string    `json:"washer"`
+	Reminded bool      `json:"reminded"`
+}
+
+// SetReminder turns the reminder on. say announces the text; nil means feed/push only.
+func (l *Laundry) SetReminder(cfg LaundryReminderConfig, stateDir string, say func(ctx context.Context, text string) error) {
+	if cfg.AfterMin <= 0 {
+		cfg.AfterMin = 60
+	}
+	if cfg.Quiet == "" {
+		cfg.Quiet = "21:00-08:00"
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.remind, l.say, l.waitPath = &cfg, say, filepath.Join(stateDir, "laundry-wait.json")
+	var w LaundryWait
+	if readJSON(l.waitPath, &w) == nil && !w.Since.IsZero() {
+		l.wait = &w
+	}
+}
+
+// onChange runs under l.mu when a machine starts or a washer finishes.
+func (l *Laundry) onChange(m *machine, started, finished bool, now time.Time) {
+	if l.remind == nil {
+		return
+	}
+	switch {
+	case m.Type == "washer" && finished:
+		l.wait = &LaundryWait{Since: now, Washer: m.Name}
+	case l.wait != nil && started: // the dryer took the load, or the washer has a new one
+		l.wait = nil
+	default:
+		return
+	}
+	l.saveWait()
+}
+
+func (l *Laundry) saveWait() {
+	if l.waitPath == "" {
+		return
+	}
+	if l.wait == nil {
+		os.Remove(l.waitPath)
+		return
+	}
+	b, _ := json.Marshal(l.wait)
+	os.WriteFile(l.waitPath, b, 0o600)
+}
+
+// Emptied: someone moved the load ("Moved it" on the dashboard).
+func (l *Laundry) Emptied() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.wait != nil {
+		log.Printf("laundry: load marked as moved")
+	}
+	l.wait = nil
+	l.saveWait()
+}
+
+// checkReminder announces a load that has sat too long, once, outside quiet hours.
+func (l *Laundry) checkReminder(ctx context.Context, now time.Time) {
+	l.mu.Lock()
+	w, cfg, say := l.wait, l.remind, l.say
+	if w == nil || cfg == nil || w.Reminded || now.Sub(w.Since) < time.Duration(cfg.AfterMin)*time.Minute {
+		l.mu.Unlock()
+		return
+	}
+	if now.Sub(w.Since) > 18*time.Hour { // long forgotten, or emptied without anyone telling us
+		l.wait = nil
+		l.saveWait()
+		l.mu.Unlock()
+		return
+	}
+	if quietHours(cfg.Quiet, now) {
+		l.mu.Unlock()
+		return
+	}
+	w.Reminded = true
+	l.saveWait()
+	l.mu.Unlock()
+
+	text := laundryReminderText(w, now)
+	if l.events != nil {
+		l.events.Post(Event{Time: now, DeviceID: "lg:wait", Device: text, Kind: "reminder"})
+	}
+	if say != nil {
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if err := say(ctx, text); err != nil {
+			log.Printf("laundry: announcing: %v", err)
+		}
+	}
+}
+
+func laundryReminderText(w *LaundryWait, now time.Time) string {
+	name := strings.ToLower(w.Washer)
+	if name == "" {
+		name = "washer"
+	}
+	if dateOnly(w.Since).Before(dateOnly(now)) {
+		return "The " + name + " finished last night and the load is still in it. Time to move the laundry."
+	}
+	return fmt.Sprintf("The %s finished %s ago. Don't forget to move the laundry.", name, spokenDur(now.Sub(w.Since)))
+}
+
+func spokenDur(d time.Duration) string {
+	m := int(d.Minutes() + 0.5)
+	switch {
+	case m < 90:
+		return fmt.Sprintf("%d minutes", m)
+	case m%60 < 15:
+		return fmt.Sprintf("%d hours", m/60)
+	}
+	return fmt.Sprintf("about %d and a half hours", m/60)
+}
+
+// quietHours: "21:00-08:00" style windows, which may wrap past midnight.
+func quietHours(spec string, now time.Time) bool {
+	from, to, ok := strings.Cut(spec, "-")
+	if !ok {
+		return false
+	}
+	parse := func(s string) int {
+		t, err := time.Parse("15:04", strings.TrimSpace(s))
+		if err != nil {
+			return -1
+		}
+		return t.Hour()*60 + t.Minute()
+	}
+	a, b, m := parse(from), parse(to), now.Hour()*60+now.Minute()
+	if a < 0 || b < 0 {
+		return false
+	}
+	if a <= b {
+		return m >= a && m < b
+	}
+	return m >= a || m < b
 }

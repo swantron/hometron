@@ -305,3 +305,82 @@ func (fakeConn) RemoteAddr() net.Addr             { return nil }
 func (fakeConn) SetDeadline(time.Time) error      { return nil }
 func (fakeConn) SetReadDeadline(time.Time) error  { return nil }
 func (fakeConn) SetWriteDeadline(time.Time) error { return nil }
+
+func TestLaundryReminder(t *testing.T) {
+	newL := func(t *testing.T) (*Laundry, *[]string) {
+		ev, _ := newEvents(nil, t.TempDir())
+		l := &Laundry{machines: map[string]*machine{}, events: ev}
+		said := &[]string{}
+		l.SetReminder(LaundryReminderConfig{}, t.TempDir(), func(_ context.Context, s string) error { *said = append(*said, s); return nil })
+		return l, said
+	}
+	day := func(h, m int) time.Time { return time.Date(2026, 11, 24, h, m, 0, 0, time.Local) }
+	ctx := context.Background()
+
+	// Washer finishes at 2:00; nobody moves it; at 3:00 the speaker says so, once.
+	l, said := newL(t)
+	l.update("w", "Washer", "washer", "RUNNING", 10, day(13, 50))
+	l.update("w", "Washer", "washer", "END", 0, day(14, 0))
+	l.checkReminder(ctx, day(14, 59))
+	if len(*said) != 0 {
+		t.Fatalf("too early: %v", *said)
+	}
+	l.update("w", "Washer", "washer", "POWER_OFF", 0, day(14, 10)) // LG turns itself off: still full
+	l.checkReminder(ctx, day(15, 1))
+	l.checkReminder(ctx, day(15, 30))
+	if len(*said) != 1 || !strings.Contains((*said)[0], "finished 61 minutes ago") {
+		t.Fatalf("said %v", *said)
+	}
+
+	// The dryer starting means the load moved.
+	l, said = newL(t)
+	l.update("w", "Washer", "washer", "RUNNING", 10, day(13, 50))
+	l.update("w", "Washer", "washer", "END", 0, day(14, 0))
+	l.update("d", "Dryer", "dryer", "POWER_OFF", 0, day(14, 5))
+	l.update("d", "Dryer", "dryer", "RUNNING", 60, day(14, 20))
+	l.checkReminder(ctx, day(15, 30))
+	if len(*said) != 0 {
+		t.Fatalf("moved to the dryer, still said %v", *said)
+	}
+
+	// "Moved it" from the dashboard.
+	l, said = newL(t)
+	l.update("w", "Washer", "washer", "RUNNING", 10, day(13, 50))
+	l.update("w", "Washer", "washer", "END", 0, day(14, 0))
+	l.Emptied()
+	l.checkReminder(ctx, day(15, 30))
+	if len(*said) != 0 {
+		t.Fatalf("emptied, still said %v", *said)
+	}
+
+	// Finishing at 8:30 PM: nothing at 9:30 PM (quiet hours), then once at 8 AM.
+	l, said = newL(t)
+	l.update("w", "Washer", "washer", "RUNNING", 10, day(20, 20))
+	l.update("w", "Washer", "washer", "END", 0, day(20, 30))
+	l.checkReminder(ctx, day(21, 31))
+	l.checkReminder(ctx, day(23, 59))
+	if len(*said) != 0 {
+		t.Fatalf("spoke during quiet hours: %v", *said)
+	}
+	morning := day(8, 1).AddDate(0, 0, 1)
+	l.checkReminder(ctx, morning)
+	if len(*said) != 1 || !strings.Contains((*said)[0], "last night") {
+		t.Fatalf("morning said %v", *said)
+	}
+}
+
+func TestQuietHours(t *testing.T) {
+	at := func(h, m int) time.Time { return time.Date(2026, 1, 1, h, m, 0, 0, time.Local) }
+	for _, c := range []struct {
+		spec string
+		t    time.Time
+		want bool
+	}{
+		{"21:00-08:00", at(21, 0), true}, {"21:00-08:00", at(2, 0), true}, {"21:00-08:00", at(8, 0), false},
+		{"21:00-08:00", at(20, 59), false}, {"13:00-14:00", at(13, 30), true}, {"13:00-14:00", at(14, 0), false}, {"junk", at(1, 0), false},
+	} {
+		if got := quietHours(c.spec, c.t); got != c.want {
+			t.Errorf("%s at %s = %v", c.spec, c.t.Format("15:04"), got)
+		}
+	}
+}
