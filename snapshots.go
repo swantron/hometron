@@ -54,11 +54,22 @@ func isJPEG(b []byte) bool {
 func (s *Snapshots) Save(deviceID string, jpeg []byte, at time.Time) (Snapshot, error) {
 	sum := sha256.Sum256([]byte(deviceID))
 	name := "snap-" + hex.EncodeToString(sum[:6]) + ".jpg"
-	tmp := filepath.Join(s.dir, "."+name)
-	if err := os.WriteFile(tmp, jpeg, 0o600); err != nil {
+	// A temp file of its own: a live view's own grab and a snapOnce grab can land in the same
+	// second for the same camera, and a shared temp name made one of them fail.
+	f, err := os.CreateTemp(s.dir, "."+name+"-*")
+	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := os.Rename(tmp, filepath.Join(s.dir, name)); err != nil {
+	tmp := f.Name()
+	_, err = f.Write(jpeg)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, filepath.Join(s.dir, name))
+	}
+	if err != nil {
+		os.Remove(tmp)
 		return Snapshot{}, err
 	}
 	snap := Snapshot{Media: name, Time: at}

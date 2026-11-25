@@ -232,6 +232,11 @@ func (st *SmartThings) SignIn() error {
 				st.maybeRenew(ctx, time.Now())
 				st.poll(ctx, time.Now())
 				cancel()
+				// Tells open dashboards to drop the "Waiting for sign-in" card now, not at their next refresh.
+				// Its own kind, so it isn't a push alert.
+				if st.events != nil {
+					st.events.Post(Event{Time: time.Now(), DeviceID: "st:signin", Device: "SmartThings · fridge data good for 24 hours", Kind: "signin"})
+				}
 				return
 			}
 		}

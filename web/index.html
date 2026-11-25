@@ -379,12 +379,13 @@ function laundryCard(l) {
   const left = l.remainMin != null ? (l.remainMin >= 60 ? `${Math.floor(l.remainMin / 60)}h ${l.remainMin % 60}m left` : `${l.remainMin} min left`) : '';
   const finished = lastEvent(l.id, ['done']);
   const waiting = l.waitSince && !l.active; // washer done, load not moved yet
+  const idle = l.run === 'Off' && !waiting; // two cards that both just say "Off" don't say which is which
   return h('div', { class: 'card laundry' + (l.active ? ' active' : '') + (done || waiting ? ' done' : ''), 'data-id': l.id },
     h('div', { class: 'glyph' }, l.room === 'dryer' ? '♨️' : '🧺'),
     h('div', { class: 'grow' },
       waiting ? h('div', {}, h('span', { class: 'state', style: 'color:var(--warn)' }, 'Load waiting'), h('span', { class: 'dim' }, ' · done ' + ago(l.waitSince)))
-        : h('div', {}, h('span', { class: 'state' }, l.run), left ? h('span', { class: 'dim' }, ' · ' + left) : null),
-      h('div', { class: 'dim' }, l.label,
+        : h('div', {}, h('span', { class: 'state' }, idle ? l.label : l.run), left ? h('span', { class: 'dim' }, ' · ' + left) : null),
+      h('div', { class: 'dim' }, idle ? 'Off' : l.label,
         !l.active && !waiting && finished ? ` · finished ${ago(finished.time)}` : '',
         waiting ? ' · move it to the dryer' : '',
         l.online ? '' : ' · not reporting'),
@@ -505,7 +506,7 @@ function thermoHistory() {
   if (!th || th.samples.length < 2) return th ? h('div', { class: 'hist dim' }, 'History starts building now: check back in an hour.') : null;
   const S = th.samples, W = 300, H = 90, pad = 2;
   const t1 = Date.now(), t0 = Math.max(t1 - 24 * 3600e3, new Date(S[0].t).getTime()); // until there's a day of history, span what we have
-  const span = t1 - t0 < 23 * 3600e3 ? 'Since ' + clock(t0) : 'Last 24 h';
+  const span = t1 - t0 < 23 * 3600e3 ? 'Since ' + (new Date(t0).toDateString() === new Date().toDateString() ? '' : 'yesterday ') + clock(t0) : 'Last 24 h';
   // Scale to inside and setpoints; in a Montana winter the outside line would flatten them.
   const vals = S.flatMap(s => [s.in, s.mode === 'HEAT' || s.mode === 'HEATCOOL' ? s.heat : null, s.mode === 'COOL' || s.mode === 'HEATCOOL' ? s.cool : null]).filter(v => v != null);
   let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
@@ -1071,7 +1072,7 @@ async function grabUntil(id, eventId, tries) {
 const CAPTURE = new URLSearchParams(location.search).has('capture');
 const pictured = new Set();
 async function pictureFor(ev) {
-  if (ev.media || pictured.has(ev.id) || document.hidden) return;
+  if (ev.media || pictured.has(ev.id) || (document.hidden && !CAPTURE)) return; // the server's copy is never "visible"; a tab in someone's pocket is
   const dev = devices.find(d => d.id === ev.deviceId);
   if (!dev || dev.kind !== 'camera') return; // the doorbell sends its own clip
   if (Date.now() - new Date(ev.time) > 60 * 1000) return;
@@ -1121,8 +1122,8 @@ document.addEventListener('visibilitychange', () => {
 let events = []; // newest first
 let filter = localStorage.getItem('feedFilter') || 'key';
 const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed', 'done', 'reminder', 'internet', 'network', 'fridge', 'fleet']);
-const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼', done: '🧺', reminder: '🗑️', internet: '🌐', network: '📡', fridge: '🧊', fleet: '☁️' };
-const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed', done: 'Laundry done', reminder: 'Reminder', internet: 'Internet', network: 'Network', fridge: 'Fridge', fleet: 'Fleet' })[ev.kind] || ev.kind;
+const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼', done: '🧺', reminder: '🗑️', internet: '🌐', network: '📡', fridge: '🧊', fleet: '☁️', signin: '🔑' };
+const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed', done: 'Laundry done', reminder: 'Reminder', internet: 'Internet', network: 'Network', fridge: 'Fridge', fleet: 'Fleet', signin: 'Signed in' })[ev.kind] || ev.kind;
 
 // A new phone or gadget on the Wi-Fi is worth a line under All, not the Important view.
 const important = e => KEY.has(e.kind) && !(e.kind === 'network' && /^New device joined/.test(e.device));
@@ -1193,7 +1194,7 @@ function connectStream() {
     const ev = JSON.parse(m.data);
     upsertEvent(ev); renderFeed();
     if (!streams[ev.deviceId]) showStill(ev.deviceId);
-    if (ev.kind === 'opened' || ev.kind === 'closed' || ev.kind === 'done' || ev.kind === 'fridge') loadDevices();
+    if (ev.kind === 'opened' || ev.kind === 'closed' || ev.kind === 'done' || ev.kind === 'fridge' || ev.kind === 'signin') loadDevices();
     if (ev.kind === 'internet' || ev.kind === 'reminder' || ev.kind === 'network') { loadHome(); if (location.hash === '#network') loadHealth(); }
     pictureFor(ev);
   };

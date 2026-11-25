@@ -33,7 +33,11 @@ func newCapture(stateDir, listen string) *Capture {
 		if strings.HasPrefix(a, "127.0.0.1:") || strings.HasPrefix(a, "localhost:") {
 			return &Capture{
 				b: &stBrowser{bin: chromeBin, profile: filepath.Join(stateDir, "capture-browser"), headless: true,
-					extra: []string{"--autoplay-policy=no-user-gesture-required", "--mute-audio"}},
+					extra: []string{"--autoplay-policy=no-user-gesture-required", "--mute-audio",
+						// Nobody ever looks at this tab, and Chrome treats an unseen tab as
+						// hidden: it throttles timers and can pause video. Keep it running.
+						"--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+						"--disable-backgrounding-occluded-windows"}},
 				url: "http://" + a + "/?capture",
 			}
 		}
@@ -84,6 +88,7 @@ func (c *Capture) ensure(ctx context.Context) error {
 		}
 		if t.URL == c.url && !found && !stale {
 			found = true
+			cd.call(ctx, "", "Target.activateTarget", map[string]any{"targetId": t.TargetID}, nil) // the front tab is the visible one
 			continue
 		}
 		old = append(old, t.TargetID)
@@ -103,6 +108,7 @@ func (c *Capture) ensure(ctx context.Context) error {
 	if err := cd.call(ctx, "", "Target.createTarget", map[string]any{"url": c.url}, &t); err != nil {
 		return err
 	}
+	cd.call(ctx, "", "Target.activateTarget", map[string]any{"targetId": t.TargetID}, nil)
 	if c.opened.IsZero() {
 		log.Printf("capture: dashboard open in headless Chrome for camera pictures")
 	}
