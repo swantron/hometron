@@ -142,15 +142,13 @@ func (l *Laundry) call(ctx context.Context, path string, out any) error {
 	return json.Unmarshal(env.Response, out)
 }
 
-// Run polls: every minute while something is running, every 3 minutes otherwise.
+// Run polls LG every minute.
 func (l *Laundry) Run(ctx context.Context) {
 	for {
-		busy := l.poll(ctx)
+		l.poll(ctx)
 		l.checkReminder(ctx, time.Now())
-		wait := 3 * time.Minute
-		if busy {
-			wait = time.Minute
-		}
+		// Every minute, running or not: a machine someone just started should show up quickly.
+		wait := time.Minute
 		select {
 		case <-ctx.Done():
 			return
