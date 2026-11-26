@@ -61,7 +61,9 @@
   button:disabled { opacity:.5; cursor:default; }
   button.on { border-color:var(--accent); background:#1d3550; }
   button.armed { background:#5a1f1f; border-color:var(--bad); }
-  button.icon { padding:6px 10px; }
+  #bell.na { opacity:.4; }
+  button.icon { padding:6px 10px; display:inline-flex; align-items:center; justify-content:center; }
+  .ico { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; display:block; }
 
   /* garage */
   .garage { padding:14px; display:flex; align-items:center; gap:14px; }
@@ -150,7 +152,7 @@
   .cams { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
   .cam .view { position:relative; aspect-ratio:16/9; background:#000; display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .cam video, .cam img { width:100%; height:100%; object-fit:cover; display:block; }
-  .cam .view .play { position:absolute; width:56px; height:56px; border-radius:50%; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); display:grid; place-items:center; font-size:22px; padding-left:4px; }
+  .cam .view .play { position:absolute; width:56px; height:56px; border-radius:50%; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.25); display:grid; place-items:center; color:#fff; }
   .cam .view .vhint { position:absolute; bottom:8px; color:#c9d1db; font-size:12px; }
   .cam.live .view .play, .cam.live .view .vhint { display:none; }
   .cam .bar { display:flex; align-items:center; gap:8px; padding:8px 10px; }
@@ -182,7 +184,7 @@
   .ev .thumb { width:96px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; background:#000; flex:none; display:grid; place-items:center; font-size:22px; position:relative; }
   .ev .thumb.media { cursor:pointer; }
   .ev .thumb.icon { width:40px; height:40px; aspect-ratio:auto; border-radius:50%; background:#222a33; font-size:18px; margin:0 28px; }
-  .ev .thumb .tag { position:absolute; bottom:3px; right:4px; font-size:10px; background:rgba(0,0,0,.6); padding:0 4px; border-radius:3px; }
+  .ev .thumb .tag { position:absolute; bottom:3px; right:4px; font-size:10px; display:inline-flex; color:#fff; background:rgba(0,0,0,.6); padding:0 4px; border-radius:3px; }
   .ev .grow { flex:1; min-width:0; }
   .ev .kind { font-weight:600; }
   .ev .kind.chime, .ev .kind.opened, .ev .kind.reminder { color:var(--warn); } .ev .kind.done { color:var(--ok); } .ev .kind.person { color:var(--accent); } .ev .kind.closed { color:var(--ok); }
@@ -196,8 +198,8 @@
   nav { display:flex; gap:4px; margin-left:8px; }
   nav a { color:var(--dim); text-decoration:none; padding:4px 10px; border-radius:999px; font-size:13px; }
   nav a.on { color:var(--text); background:#26303b; }
-  #netview { padding:16px; max-width:1100px; }
-  #fleetview { padding:16px; max-width:1200px; display:flex; flex-direction:column; gap:12px; }
+  #netview { padding:16px; max-width:1600px; margin:0 auto; }
+  #fleetview { padding:16px; max-width:1600px; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
   #fleetview h2 { margin:8px 0 0; }
   .fsum { padding:14px; display:flex; flex-wrap:wrap; gap:10px 28px; align-items:center; }
   .fsum .big { font-size:20px; font-weight:600; flex:1 1 260px; } .fsum .big.ok { color:var(--ok); } .fsum .big.bad { color:var(--bad); }
@@ -231,11 +233,11 @@
 </style>
 </head>
 <body>
-<header><h1>hometron</h1><nav><a href="#" data-view="home">Home</a><a href="#network" data-view="network">Network</a><a href="#fleet" data-view="fleet">Fleet</a></nav><span class="status"><button id="bell" class="icon" title="Doorbell and person alerts on this device">🔕</button><span id="status">loading…</span><span class="dot" id="dot" title="live updates"></span></span></header>
+<header><h1>hometron</h1><nav><a href="#" data-view="home">Home</a><a href="#network" data-view="network">Network</a><a href="#fleet" data-view="fleet">Fleet</a></nav><span class="status"><button id="bell" class="icon" title="Doorbell and person alerts on this device" aria-label="Alerts on this device"></button><span id="status">loading…</span><span class="dot" id="dot" title="live updates"></span></span></header>
 <main>
   <div class="col">
   <section id="quick"></section>
-  <section id="camsec"><h2>Cameras <span class="chips"><button id="snapall" title="Grab a fresh still from every camera">📷 Refresh stills</button></span></h2><div class="cams" id="cams"></div></section>
+  <section id="camsec"><h2>Cameras <span class="chips"><button id="snapall" title="Grab a fresh still from every camera">Refresh stills</button></span></h2><div class="cams" id="cams"></div></section>
   <section id="glance"></section>
   </div>
   <div class="col">
@@ -271,6 +273,40 @@ const h = (tag, attrs = {}, ...kids) => {
   }
   el.append(...kids.flat().filter(k => k != null && k !== false));
   return el;
+};
+// Line icons (24×24, stroke = currentColor) instead of emoji, so buttons and cards
+// look the same on every device and match the rest of the type.
+const ICONS = {
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+  sound: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
+  muted: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
+  expand: '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+  bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8c0 2.7.4 4.6 1 6"/><path d="M17 17H3s3-2 3-9a6 6 0 0 1 .3-1.9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/><path d="m2 2 20 20"/>',
+  play: '<path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/>',
+  person: '<circle cx="12" cy="7" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  motion: '<path d="M2 12h4l3-8 6 16 3-8h4"/>',
+  clip: '<rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4z"/>',
+  up: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+  down: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  washer: '<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M8 6h.01M11 6h.01"/>',
+  dryer: '<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="13" r="5"/><path d="M9.5 13c.8-1 1.7-1 2.5 0s1.7 1 2.5 0"/><path d="M8 6h.01"/>',
+  fridge: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M5 10h14"/><path d="M8.5 5v2M8.5 13v4"/>',
+  trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m5 6 1 15h12l1-15"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20"/>',
+  wifi: '<path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5 12.6a10 10 0 0 1 14 0"/><path d="M8.5 16.1a5 5 0 0 1 7 0"/><path d="M12 20h.01"/>',
+  cloud: '<path d="M17.5 19H8a6 6 0 1 1 5.7-8 4.5 4.5 0 1 1 3.8 8z"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3"/><path d="m16 7 3 3"/>',
+  printer: '<path d="M6 9V2h12v7"/><rect x="2" y="9" width="20" height="9" rx="2"/><path d="M6 14h12v8H6z"/>',
+  dot: '<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>',
+};
+const icon = (name, size = 18) => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', size); svg.setAttribute('height', size);
+  svg.setAttribute('class', 'ico'); svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = ICONS[name] || ICONS.dot;
+  return svg;
 };
 const ago = t => {
   const s = (Date.now() - new Date(t)) / 1000;
@@ -338,7 +374,7 @@ function renderQuick() {
 
 function fridgeCard(f) {
   if (f.run === 'signin' || f.run === 'signing-in') return h('div', { class: 'card laundry', 'data-id': f.id },
-    h('div', { class: 'glyph' }, '🧊'),
+    h('div', { class: 'glyph' }, icon('fridge', 22)),
     h('div', { class: 'grow' }, h('div', { class: 'state', style: 'color:var(--warn)' }, f.run === 'signin' ? 'SmartThings sign-in expired' : 'Waiting for sign-in'),
       h('div', { class: 'dim' }, f.run === 'signin' ? 'Opens Chrome on the server’s screen. Sign in there over Screen Sharing; hometron does the rest.' : f.problem)),
     f.run === 'signin' ? h('button', { onclick: async e => {
@@ -348,7 +384,7 @@ function fridgeCard(f) {
       loadDevices();
     } }, 'Sign in') : null);
   if (f.run === 'connect') return h('div', { class: 'card laundry', 'data-id': f.id },
-    h('div', { class: 'glyph' }, '🧊'),
+    h('div', { class: 'glyph' }, icon('fridge', 22)),
     h('div', { class: 'grow' }, h('div', { class: 'state' }, 'Fridge'), h('div', { class: 'dim' }, 'Sign in to SmartThings once to connect it')),
     h('a', { href: '/smartthings/connect' }, h('button', {}, 'Connect')));
   const open = (f.parts || []).filter(p => p.open);
@@ -357,7 +393,7 @@ function fridgeCard(f) {
   const extra = [drawer ? `drawer: ${drawer.mode}` : '', f.ice || '', f.filterPc != null ? `water filter ${f.filterPc}% used` : '',
     f.kwhMonth != null ? `${f.kwhMonth} kWh this month` + (f.kwhLast != null ? ` (${f.kwhLast} last)` : '') : '', ...(f.notes || [])].filter(Boolean).join(' · ');
   return h('div', { class: 'card laundry' + (open.length ? ' active' : ''), 'data-id': f.id },
-    h('div', { class: 'glyph' }, '🧊'),
+    h('div', { class: 'glyph' }, icon('fridge', 22)),
     h('div', { class: 'grow' },
       h('div', {}, h('span', { class: 'state', style: open.length ? 'color:var(--warn)' : '' },
         open.length ? open.map(p => `${p.name} door open${p.openMin ? ' ' + p.openMin + 'm' : ''}`).join(', ') : temps || f.label)),
@@ -381,7 +417,7 @@ function laundryCard(l) {
   const waiting = l.waitSince && !l.active; // washer done, load not moved yet
   const idle = l.run === 'Off' && !waiting; // two cards that both just say "Off" don't say which is which
   return h('div', { class: 'card laundry' + (l.active ? ' active' : '') + (done || waiting ? ' done' : ''), 'data-id': l.id },
-    h('div', { class: 'glyph' }, l.room === 'dryer' ? '♨️' : '🧺'),
+    h('div', { class: 'glyph' }, icon(l.room === 'dryer' ? 'dryer' : 'washer', 22)),
     h('div', { class: 'grow' },
       waiting ? h('div', {}, h('span', { class: 'state', style: 'color:var(--warn)' }, 'Load waiting'), h('span', { class: 'dim' }, ' · done ' + ago(l.waitSince)))
         : h('div', {}, h('span', { class: 'state' }, idle ? l.label : l.run), left ? h('span', { class: 'dim' }, ' · ' + left) : null),
@@ -421,7 +457,7 @@ function sensorlessGarageCard(g) {
       h('div', { class: 'grow' }, h('div', { class: 'name' }, g.label),
         g.problem ? h('div', { class: 'problem' }, g.door === 'unknown' && !g.online ? "Can't reach the Tailwind: " + g.problem : g.problem)
                   : h('div', { class: 'dim' }, 'Works like the wall button')),
-      cam ? h('button', { class: 'icon', title: 'New still', onclick: () => snapOnce(cam.id) }, '📷') : null,
+      cam ? h('button', { class: 'icon', title: 'New still', 'aria-label': 'New still', onclick: () => snapOnce(cam.id) }, icon('camera')) : null,
       btn));
   let armTimer;
   btn.addEventListener('click', async () => {
@@ -448,7 +484,7 @@ function garageCard(g) {
   const verb = g.door === 'open' ? 'close' : 'open';
   const btn = h('button', { disabled: !known || !!g.problem }, verb === 'open' ? 'Open' : 'Close');
   const card = h('div', { class: `card garage ${g.door}`, 'data-id': g.id },
-    h('div', { class: 'glyph' }, g.door === 'open' ? '▲' : g.door === 'closed' ? '▼' : '?'),
+    h('div', { class: 'glyph' }, g.door === 'open' ? icon('up', 24) : g.door === 'closed' ? icon('down', 24) : '?'),
     h('div', { class: 'grow' },
       h('div', { class: 'state' }, known ? (g.door === 'open' ? 'Open' : 'Closed') : 'Unknown'),
       h('div', { class: 'dim' }, g.label, last ? ' · since ' + clock(last.time) : ''),
@@ -623,7 +659,11 @@ function weatherCard(w) {
         h('b', {}, Math.round(p.tempF) + '°'),
         h('div', { class: 'dim', title: p.text }, shortSky(p.text) + (p.precip >= 20 ? ` · ${p.precip}%` : ''))))) : null);
 }
-const shortSky = t => t.length > 18 ? t.split(/ then |,| and /i)[0].slice(0, 18) : t;
+const shortSky = t => {
+  t = t.split(/ then |,| and /i)[0].trim();
+  if (t.length <= 22) return t;
+  const cut = t.slice(0, 22); return cut.slice(0, cut.lastIndexOf(' ')) || cut;
+};
 
 function calendarCard(c) {
   const rows = []; let day = null;
@@ -632,7 +672,7 @@ function calendarCard(c) {
     const d = calDay(e.start);
     if (d !== day) { rows.push(h('div', { class: 'd' }, d)); day = d; }
     rows.push(h('div', { class: 'e' + (e.chore ? ' chore' : '') + (!e.allDay && new Date(e.end) < now ? ' past' : '') },
-      h('div', { class: 't' }, e.allDay ? (e.chore ? '🗑️' : 'all day') : clock(e.start)),
+      h('div', { class: 't' }, e.allDay ? (e.chore ? 'chore' : 'all day') : clock(e.start)),
       h('div', {}, e.title, e.location ? h('div', { class: 'dim' }, e.location.split('\n')[0]) : null)));
   }
   if (!rows.length) rows.push(h('div', { class: 'dim' }, 'Nothing on the calendar this week.'));
@@ -660,14 +700,14 @@ function statusRow(d) {
     const cls = p.state === 'offline' || p.state === 'stopped' ? 'bad' : low.length ? 'warn' : 'ok';
     const word = p.state === 'offline' ? 'Offline' : p.state === 'stopped' ? 'Needs attention' : p.state === 'printing' ? 'Printing' : low.length ? low.map(m => inkName(m.name)).join(', ') + ' low' : 'Ready';
     cards.push(h('div', { class: 'card', title: [p.name, ...(p.reasons || [])].join('\n') },
-      h('div', { class: 'k' }, '🖨️ Printer'),
+      h('div', { class: 'k' }, 'Printer'),
       h('div', { class: 'v ' + cls }, word),
       p.markers?.length ? h('div', { class: 'ink' }, p.markers.map(m => h('div', { class: 'bar', title: `${m.name}: ${m.level >= 0 ? m.level + '%' : 'level unknown'}` },
         h('span', { style: `height:${m.level >= 0 ? Math.max(4, m.level) : 50}%;background:${m.color || '#8b95a3'};${m.level < 0 ? 'opacity:.35' : ''}` })))) : null));
   }
   if (d.chime) {
     cards.push(h('div', { class: 'card', style: 'flex:0 1 170px', title: 'Speakers ring when the doorbell is pressed' },
-      h('div', { class: 'k' }, '🔔 Chime', h('button', { onclick: testChime, title: 'Play the chime on the speakers now' }, 'Test')),
+      h('div', { class: 'k' }, 'Chime', h('button', { onclick: testChime, title: 'Play the chime on the speakers now' }, 'Test')),
       h('div', { class: 'v ok' }, 'On')));
   }
   return h('div', { class: 'stat' }, cards);
@@ -687,7 +727,7 @@ function pathRow(now) {
     parts.push(h('span', { class: 'hop ' + hopClass(x), title: `${x.host || ''} · ${x.loss}% loss` + (x.jitter ? ` · ±${x.jitter} ms` : '') },
       name + ' ' + (x.loss >= 100 ? '✕' : Math.round(x.ms) + ' ms')));
   }
-  for (const p of now.points || []) parts.push(h('span', { class: 'hop ' + hopClass(p), title: `Mesh point ${p.host} · ${p.loss}% loss` }, '📶 ' + p.name + ' ' + (p.loss >= 100 ? '✕' : Math.round(p.ms) + ' ms')));
+  for (const p of now.points || []) parts.push(h('span', { class: 'hop ' + hopClass(p), title: `Mesh point ${p.host} · ${p.loss}% loss` }, p.name + ' ' + (p.loss >= 100 ? '✕' : Math.round(p.ms) + ' ms')));
   if (now.dns !== undefined) parts.push(h('span', { class: 'hop ' + (now.dns < 0 ? 'down' : now.dns > 300 ? 'slow' : 'ok'), title: 'Name lookups through the house DNS' }, 'DNS ' + (now.dns < 0 ? '✕' : now.dns + ' ms')));
   return h('div', { class: 'path' }, parts);
 }
@@ -699,7 +739,7 @@ function networkCard(n, net) {
   const words = net && !net.up ? 'Internet down since ' + clock(net.since) : n ? n.words : 'Up';
   const rep = net?.report;
   return h('div', { class: 'card', style: 'flex:3 1 380px' },
-    h('div', { class: 'k' }, '🌐 Network',
+    h('div', { class: 'k' }, 'Network',
       h('span', {}, h('button', { onclick: speedTest, title: 'Measure download and upload from this device (about 35 MB)' }, 'Speed test'), ' ', h('a', { href: '#network' }, 'Details →'))),
     h('div', { class: 'v ' + (ok ? 'ok' : 'bad') }, words),
     pathRow(n?.now),
@@ -797,13 +837,16 @@ function renderHealth({ net: n, internet: net }) {
 // their drop log, since a flaky point takes everything near it offline.
 function unitBlock(r, samples) {
   const restartedAt = Date.now() - r.uptimeSec * 1000;
-  const recent = r.uptimeSec < 2 * 86400;
+  // Uptime is 0 until hometron's first status check after its own restart: that's
+  // "don't know yet", not "this unit just rebooted".
+  const known = r.uptimeSec > 0;
+  const recent = known && r.uptimeSec < 2 * 86400;
   const kids = [
     h('div', { class: 'kv' },
       h('span', {}, h('b', {}, r.name), r.root ? ' (main)' : ''),
       h('span', { class: 'dim ' + (r.ping && r.ping.loss >= 100 ? 'badc' : r.root && r.online === false ? 'badc' : '') },
         r.ping ? (r.ping.loss >= 100 ? 'not answering' : Math.round(r.ping.ms) + ' ms' + (r.ping.loss ? ` · ${r.ping.loss}% loss` : '')) : r.root ? (r.online === false ? 'no internet' : 'online') : '')),
-    kv(recent ? 'Restarted' : 'Up for', recent ? new Date(restartedAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ` (${upFor(r.uptimeSec)} ago)` : upFor(r.uptimeSec),
+    kv(recent ? 'Restarted' : 'Up for', !known ? 'checking…' : recent ? new Date(restartedAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) + ` (${upFor(r.uptimeSec)} ago)` : upFor(r.uptimeSec),
       recent && !r.root ? 'warnc' : ''),
   ];
   if (r.led && r.led !== 'CONNECTED') kids.push(kv('Light', r.led.toLowerCase().replace(/_/g, ' '), 'warnc'));
@@ -903,10 +946,10 @@ function renderCams() {
         h('div', { class: 'view', onclick: () => streams[d.id] ? null : startLive(d.id) }),
         h('div', { class: 'bar' },
           h('div', { class: 'grow' }, h('div', { class: 'name' }, d.label), h('div', { class: 'dim sub' })),
-          h('button', { class: 'icon snap', title: 'New still', onclick: () => snapOnce(d.id) }, '📷'),
+          h('button', { class: 'icon snap', title: 'New still', 'aria-label': 'New still', onclick: () => snapOnce(d.id) }, icon('camera')),
           h('div', { class: 'ctl' },
-            h('button', { class: 'icon mute', title: 'Sound', onclick: () => toggleMute(d.id) }, '🔇'),
-            h('button', { class: 'icon', title: 'Full screen', onclick: () => fullscreen(d.id) }, '⛶'),
+            h('button', { class: 'icon mute', title: 'Sound', 'aria-label': 'Sound', onclick: () => toggleMute(d.id) }, icon('muted')),
+            h('button', { class: 'icon', title: 'Full screen', 'aria-label': 'Full screen', onclick: () => fullscreen(d.id) }, icon('expand')),
             h('button', { onclick: () => stopLive(d.id) }, 'Stop'))),
         h('div', { class: 'err' }));
       wrap.append(card);
@@ -919,7 +962,7 @@ function showStill(id) {
   const card = $(`[data-id="${CSS.escape(id)}"]`); if (!card) return;
   const dev = devices.find(d => d.id === id);
   const last = events.find(e => e.deviceId === id);
-  $('.sub', card).textContent = last ? `${label(last)} · ${ago(last.time)}` : (dev?.kind === 'doorbell' ? 'Doorbell' : dev?.room || '');
+  $('.sub', card).textContent = last ? `${label(last)} · ${ago(last.time)}` : 'No recent activity';
   const still = stillFor(id);
   const kids = [];
   if (still) {
@@ -928,8 +971,8 @@ function showStill(id) {
       : h('img', { src: still.src, alt: '' }));
     kids.push(h('span', { class: 'badge' }, still.label ? `${still.label} · ${ago(still.time)}` : ago(still.time)));
   }
-  kids.push(h('div', { class: 'play' }, '▶'));
-  if (!still) kids.push(h('div', { class: 'vhint' }, 'Tap for live view · 📷 for a still'));
+  kids.push(h('div', { class: 'play' }, icon('play', 24)));
+  if (!still) kids.push(h('div', { class: 'vhint' }, 'Tap for live view'));
   $('.view', card).replaceChildren(...kids);
   $$('video', card).forEach(v => v.muted = true);
 }
@@ -965,7 +1008,7 @@ async function startLive(id) {
     card.classList.add('live');
     // Watching a camera refreshes its still: once the picture settles, then every minute.
     streams[id].snapTimer = setInterval(() => grab(id), 60 * 1000);
-    $('.mute', card).textContent = '🔇';
+    $('.mute', card).replaceChildren(icon('muted'));
   } catch (e) {
     pc.close(); delete streams[id]; showStill(id);
     err.textContent = e.message.slice(0, 200);
@@ -1105,7 +1148,7 @@ function openLiveFromCard(id) {
 function toggleMute(id) {
   const s = streams[id]; if (!s) return;
   s.video.muted = !s.video.muted;
-  $(`[data-id="${CSS.escape(id)}"] .mute`).textContent = s.video.muted ? '🔇' : '🔊';
+  $(`[data-id="${CSS.escape(id)}"] .mute`).replaceChildren(icon(s.video.muted ? 'muted' : 'sound'));
 }
 function fullscreen(id) {
   const v = streams[id]?.video; if (!v) return;
@@ -1122,7 +1165,7 @@ document.addEventListener('visibilitychange', () => {
 let events = []; // newest first
 let filter = localStorage.getItem('feedFilter') || 'key';
 const KEY = new Set(['chime', 'person', 'clip', 'opened', 'closed', 'done', 'reminder', 'internet', 'network', 'fridge', 'fleet']);
-const ICON = { chime: '🔔', person: '🚶', motion: '〰️', sound: '🔊', clip: '🎬', opened: '▲', closed: '▼', done: '🧺', reminder: '🗑️', internet: '🌐', network: '📡', fridge: '🧊', fleet: '☁️', signin: '🔑' };
+const ICON = { chime: 'bell', person: 'person', motion: 'motion', sound: 'sound', clip: 'clip', opened: 'up', closed: 'down', done: 'washer', reminder: 'bell', internet: 'globe', network: 'wifi', fridge: 'fridge', fleet: 'cloud', signin: 'key' };
 const label = ev => ({ chime: 'Doorbell', person: 'Person', motion: 'Motion', sound: 'Sound', clip: 'Clip', opened: 'Opened', closed: 'Closed', done: 'Laundry done', reminder: 'Reminder', internet: 'Internet', network: 'Network', fridge: 'Fridge', fleet: 'Fleet', signin: 'Signed in' })[ev.kind] || ev.kind;
 
 // A new phone or gadget on the Wi-Fi is worth a line under All, not the Important view.
@@ -1149,8 +1192,8 @@ function renderFeed() {
       thumb = h('div', { class: 'thumb media', onclick: () => openMedia(ev) },
         isVid ? h('video', { src: '/media/' + ev.media + '#t=0.5', muted: true, playsinline: true, preload: 'metadata', class: 'thumb' })
               : h('img', { src: '/media/' + ev.media, loading: 'lazy', alt: '', class: 'thumb' }),
-        isVid ? h('span', { class: 'tag' }, '▶') : null);
-    } else thumb = h('div', { class: 'thumb icon' }, ICON[ev.kind] || '•');
+        isVid ? h('span', { class: 'tag' }, icon('play', 10)) : null);
+    } else thumb = h('div', { class: 'thumb icon' }, icon(ICON[ev.kind] || 'dot', 18));
     rows.push(h('div', { class: 'ev' },
       thumb,
       h('div', { class: 'grow' },
@@ -1216,12 +1259,13 @@ let swReg = null;
 
 async function initPush() {
   const bell = $('#bell');
-  if (!pushOK) { bell.title = 'Alerts need the https:// address (tailscale serve)'; return; }
+  setBell(false);
+  if (!pushOK) { bell.title = 'Alerts need the https:// address (tailscale serve)'; bell.classList.add('na'); return; }
   try { swReg = await navigator.serviceWorker.register('/sw.js'); } catch (e) { bell.title = 'Service worker failed: ' + e.message; return; }
   const sub = await swReg.pushManager.getSubscription();
   setBell(!!sub && Notification.permission === 'granted');
 }
-function setBell(on) { const b = $('#bell'); b.textContent = on ? '🔔' : '🔕'; b.classList.toggle('on', on); }
+function setBell(on) { const b = $('#bell'); b.replaceChildren(icon(on ? 'bell' : 'bellOff')); b.classList.toggle('on', on); }
 
 function keyBytes(b64) {
   const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - b64.length % 4) % 4));
@@ -1311,8 +1355,8 @@ $('#rescan').addEventListener('click', () => loadNetwork(true));
 $('#snapall').addEventListener('click', async e => {
   const b = e.currentTarget; b.disabled = true;
   const cams = $$('.cam').map(c => c.dataset.id).filter(id => !streams[id]);
-  for (let i = 0; i < cams.length; i++) { b.textContent = '📷 ' + (i + 1) + '/' + cams.length; await snapOnce(cams[i]); }
-  b.textContent = '📷 Refresh stills'; b.disabled = false;
+  for (let i = 0; i < cams.length; i++) { b.textContent = 'Refreshing ' + (i + 1) + '/' + cams.length; await snapOnce(cams[i]); }
+  b.textContent = 'Refresh stills'; b.disabled = false;
 });
 
 
@@ -1335,16 +1379,19 @@ function renderFleet() {
   const sugg = inv.suggestions || [];
   const fixed = (f.fixed || []).reduce((a, x) => a + x.usd, 0);
   const doLast = inv.doInvoices?.[0];
+  // What's running there now, priced; the last invoice lags a month behind any cleanup.
+  const doNow = res.filter(r => r.provider === 'DigitalOcean').reduce((a, r) => a + (r.usd || 0), 0);
+  const doText = !doLast ? null : Math.abs(doNow - doLast.usd) < 1 ? `DigitalOcean ${usd(doLast.usd)}` : `DigitalOcean ${usd(doNow)} now (last bill ${usd(doLast.usd)})`;
   const kids = [];
 
   // Summary line
   kids.push(h('div', { class: 'card fsum' },
     h('div', { class: 'big ' + (down.length ? 'bad' : 'ok') }, !sites.length ? "Checking sites…" : down.length ? `${down.length} down: ${down.map(s => s.name).join(", ")}` : `All ${sites.length} sites up`),
     h('div', { class: 'facts' },
-      fact('Monthly', [doLast ? `DigitalOcean ${usd(doLast.usd)}` : null, fixed ? `subscriptions ${usd(fixed)}` : null, inv.workspace?.usd ? `Workspace ${usd(inv.workspace.usd)}` : null, 'Google Cloud: no billing export'].filter(Boolean).join(' · ')),
+      fact('Monthly', [doText, fixed ? `subscriptions ${usd(fixed)}` : null, inv.workspace?.usd ? `Workspace ${usd(inv.workspace.usd)}` : null, 'Google Cloud: no billing export'].filter(Boolean).join(' · ')),
       inv.doMonthToDate != null ? fact('DO this month', usd(inv.doMonthToDate) + ' so far') : null,
       fact("Inventory", fresh ? `${res.filter(r => !r.infra).length} things · ${ago(inv.at)}` : 'taking inventory…',
-        h('button', { class: 'icon', title: 'Take inventory again now', onclick: async e => { e.target.disabled = true; await postJSON('/api/fleet/refresh', {}); toastOK('Taking inventory: takes a minute.'); setTimeout(loadFleet, 60000); } }, '↻'))),
+        h('button', { title: 'Take inventory again now', onclick: async e => { e.target.disabled = true; await postJSON('/api/fleet/refresh', {}); toastOK('Taking inventory: takes a minute.'); setTimeout(loadFleet, 60000); } }, 'Refresh'))),
     f.missing?.length ? h('div', { class: 'dim', style: 'color:var(--warn)' }, 'Not connected: ' + f.missing.join(', ')) : null,
     inv.errors?.length ? h('details', { class: 'dim' }, h('summary', {}, `${inv.errors.length} thing(s) couldn’t be read`), h('ul', {}, inv.errors.map(e => h('li', {}, e)))) : null));
 

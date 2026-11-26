@@ -181,6 +181,9 @@ func (f *Fleet) Inventory(ctx context.Context) {
 	inv := FleetInventory{At: time.Now()}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	// A provider that fails outright (expired sign-in, API down) keeps its last good
+	// resources below, so a bad morning doesn't empty the page or look like everything was deleted.
+	var doFailed, gcpFailed, wsFailed bool
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -194,6 +197,7 @@ func (f *Fleet) Inventory(ctx context.Context) {
 		inv.DOMonth, inv.DOInvoices = month, invs
 		if err != nil {
 			inv.Errors = append(inv.Errors, "DigitalOcean: "+err.Error())
+			doFailed = len(res) == 0
 		}
 	}()
 	go func() {
@@ -215,8 +219,39 @@ func (f *Fleet) Inventory(ctx context.Context) {
 			inv.Errors = append(inv.Errors, "Google Workspace: "+shortErr(wsErr))
 		}
 		inv.Errors = append(inv.Errors, errs...)
+		gcpFailed = len(projects) == 0 && len(errs) > 0
+		wsFailed = ws == nil && wsErr != nil && wsErr != errScope
 	}()
 	wg.Wait()
+	f.mu.Lock()
+	last := f.inv
+	f.mu.Unlock()
+	if !last.At.IsZero() {
+		stale := " (showing what it found " + last.At.Format("Jan 2 15:04") + ")"
+		keep := func(provider string) {
+			for _, r := range last.Resources {
+				if r.Provider == provider {
+					inv.Resources = append(inv.Resources, r)
+				}
+			}
+			for i, e := range inv.Errors {
+				if strings.HasPrefix(e, provider) && !strings.HasSuffix(e, ")") {
+					inv.Errors[i] = e + stale
+				}
+			}
+		}
+		if doFailed {
+			keep("DigitalOcean")
+			inv.DOMonth, inv.DOInvoices = last.DOMonth, last.DOInvoices
+		}
+		if gcpFailed {
+			keep("Google Cloud")
+			inv.Projects = last.Projects
+		}
+		if wsFailed && last.Workspace != nil {
+			inv.Workspace = last.Workspace
+		}
+	}
 	sort.SliceStable(inv.Resources, func(i, j int) bool {
 		a, b := inv.Resources[i], inv.Resources[j]
 		if a.Provider != b.Provider {

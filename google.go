@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -95,6 +96,11 @@ func (g *Google) Token(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if out.AccessToken == "" {
+		if strings.Contains(out.Description, "invalid_rapt") {
+			// A Workspace account under Google Cloud session control: the admin console's
+			// reauthentication policy decides how long a sign-in lasts.
+			return "", fmt.Errorf("Google wants a fresh sign-in (Workspace reauthentication policy); sign in again or turn reauthentication off for trusted apps in the Admin console")
+		}
 		return "", fmt.Errorf("token refresh failed: %s %s", out.Error, out.Description)
 	}
 	g.access = out.AccessToken
