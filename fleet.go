@@ -40,10 +40,11 @@ type fleetConfig struct {
 		Expires   string `json:"expires"`
 		Registrar string `json:"registrar"`
 	} `json:"domains"`
-	Checks       []string         `json:"checks"`
-	Fixed        []FixedCost      `json:"fixed"`
-	QuotaProject string           `json:"gcpQuotaProject"`
-	Workspace    *workspaceConfig `json:"workspace"`
+	Checks       []string          `json:"checks"`
+	Fixed        []FixedCost       `json:"fixed"`
+	QuotaProject string            `json:"gcpQuotaProject"`
+	Workspace    *workspaceConfig  `json:"workspace"`
+	Apps         map[string]string `json:"apps"` // project -> the site its sign-ins and saves belong to
 }
 
 type FixedCost struct {
@@ -56,6 +57,7 @@ type Fleet struct {
 	cfg      fleetConfig
 	doToken  string
 	gcp      *Google // nil without fleet-token.json
+	vercel   vercelConfig
 	internet *Internet
 	events   *Events
 	http     *http.Client
@@ -86,6 +88,7 @@ type Resource struct {
 	IP       string   `json:"ip,omitempty"`
 	Domains  []string `json:"domains,omitempty"`
 	Infra    bool     `json:"infra,omitempty"` // created by the platform (staging buckets etc.), not by you
+	Bytes    float64  `json:"bytes,omitempty"` // stored size, for image repos and buckets
 }
 
 type GCPProject struct {
@@ -115,6 +118,8 @@ type FleetInventory struct {
 	Errors      []string       `json:"errors,omitempty"`
 	Suggestions []Suggestion   `json:"suggestions,omitempty"`
 	Workspace   *WorkspaceView `json:"workspace,omitempty"`
+	Traffic     []Traffic      `json:"traffic,omitempty"`
+	TrafficNote []string       `json:"trafficNotes,omitempty"` // sources not connected
 }
 
 type Invoice struct {
@@ -137,6 +142,7 @@ func loadFleet(stateDir string, internet *Internet, events *Events) (*Fleet, err
 	if readJSON(filepath.Join(stateDir, "digitalocean.json"), &do) == nil {
 		f.doToken = do.Token
 	}
+	readJSON(filepath.Join(stateDir, "vercel.json"), &f.vercel)
 	if g, err := loadGoogleToken(stateDir, "fleet-token.json"); err == nil {
 		f.gcp = g
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -263,6 +269,10 @@ func (f *Fleet) Inventory(ctx context.Context) {
 		return a.Kind+a.Name < b.Kind+b.Name
 	})
 	f.lookupDomains(ctx, inv.Resources)
+	inv.Traffic, inv.TrafficNote = f.traffic(ctx, inv.Resources)
+	if gcpFailed && !last.At.IsZero() {
+		inv.Traffic, inv.TrafficNote = last.Traffic, last.TrafficNote
+	}
 
 	f.mu.Lock()
 	old := f.inv
@@ -635,8 +645,17 @@ func (f *Fleet) googleCloud(ctx context.Context) ([]Resource, []GCPProject, []st
 		} `json:"billingAccounts"`
 	}
 	if f.gget(ctx, qp, "https://cloudbilling.googleapis.com/v1/billingAccounts", &ba) == nil {
+		seen := map[string]int{}
 		for _, a := range ba.Accounts {
-			accounts[a.Name] = a.DisplayName
+			seen[a.DisplayName]++
+		}
+		for _, a := range ba.Accounts {
+			name := a.DisplayName
+			if seen[name] > 1 || name == "" { // tell same-named accounts apart by the end of their ID
+				id := strings.TrimPrefix(a.Name, "billingAccounts/")
+				name = strings.TrimSpace(name + " …" + id[max(0, len(id)-6):])
+			}
+			accounts[a.Name] = name
 		}
 	}
 
@@ -701,7 +720,7 @@ func (f *Fleet) gcpProject(ctx context.Context, p string) ([]Resource, []string,
 	on := map[string]bool{}
 	if err := f.gget(ctx, p, "https://serviceusage.googleapis.com/v1/projects/"+p+"/services?filter=state:ENABLED&pageSize=200", &su); err != nil {
 		if err == errAPIOff {
-			return nil, nil, nil // not even Service Usage is on: nothing can be running here
+			return f.apiKeys(ctx, p), nil, nil // not even Service Usage is on: nothing runs here, but it can still hold an API key
 		}
 		return nil, nil, []string{"enabled APIs: " + shortErr(err)}
 	}
@@ -877,9 +896,10 @@ func (f *Fleet) gcpProject(ctx context.Context, p string) ([]Resource, []string,
 				}
 				var rs struct {
 					Repos []struct {
-						Name string `json:"name"`
-						Size string `json:"sizeBytes"`
-						Fmt  string `json:"format"`
+						Name    string         `json:"name"`
+						Size    string         `json:"sizeBytes"`
+						Fmt     string         `json:"format"`
+						Cleanup map[string]any `json:"cleanupPolicies"`
 					} `json:"repositories"`
 				}
 				if f.gget(ctx, p, "https://artifactregistry.googleapis.com/v1/projects/"+p+"/locations/"+l.ID+"/repositories", &rs) != nil {
@@ -887,8 +907,21 @@ func (f *Fleet) gcpProject(ctx context.Context, p string) ([]Resource, []string,
 				}
 				for _, r := range rs.Repos {
 					n, _ := strconv.ParseFloat(r.Size, 64)
+					if len(r.Cleanup) == 0 && n >= 500e6 {
+						// The list leaves cleanup policies out; only a repo big enough to flag is worth asking about.
+						var one struct {
+							Cleanup map[string]any `json:"cleanupPolicies"`
+						}
+						if f.gget(ctx, p, "https://artifactregistry.googleapis.com/v1/"+r.Name, &one) == nil {
+							r.Cleanup = one.Cleanup
+						}
+					}
 					name := r.Name[strings.LastIndex(r.Name, "/")+1:]
-					add(Resource{Kind: "image repo", Name: name, Detail: fmt.Sprintf("%s · %s · %s", l.ID, strings.ToLower(r.Fmt), bytesStr(n)),
+					detail := fmt.Sprintf("%s · %s · %s", l.ID, strings.ToLower(r.Fmt), bytesStr(n))
+					if len(r.Cleanup) > 0 {
+						detail += " · " + cleanupNote
+					}
+					add(Resource{Kind: "image repo", Name: name, Detail: detail, Bytes: n,
 						Infra: n < 1e6 || name == "gcf-artifacts" || name == "gae-standard"})
 				}
 			}
@@ -905,7 +938,30 @@ func (f *Fleet) gcpProject(ctx context.Context, p string) ([]Resource, []string,
 		err := f.gget(ctx, p, "https://firebasehosting.googleapis.com/v1beta1/projects/"+p+"/sites", &hs)
 		note("Firebase Hosting", err)
 		for _, s := range hs.Sites {
-			add(Resource{Kind: "Firebase site", Name: s.Name[strings.LastIndex(s.Name, "/")+1:], URL: s.URL})
+			r := Resource{Kind: "Firebase site", Name: s.Name[strings.LastIndex(s.Name, "/")+1:], URL: s.URL}
+			// Its custom domains: the ones it serves go in Domains (so a domain on the shared
+			// Firebase address is matched to the right site), the redirects in Detail.
+			var cd struct {
+				Domains []struct {
+					Name     string `json:"name"`
+					Redirect string `json:"redirectTarget"`
+				} `json:"customDomains"`
+			}
+			if f.gget(ctx, p, "https://firebasehosting.googleapis.com/v1beta1/"+s.Name+"/customDomains", &cd) == nil {
+				var redirects []string
+				for _, d := range cd.Domains {
+					name := d.Name[strings.LastIndex(d.Name, "/")+1:]
+					if d.Redirect != "" {
+						redirects = append(redirects, name)
+					} else {
+						r.Domains = append(r.Domains, name)
+					}
+				}
+				if len(redirects) > 0 {
+					r.Detail = "also " + strings.Join(redirects, ", ") + " (redirect)"
+				}
+			}
+			add(r)
 		}
 	}
 	if on["storage"] || on["storage-api"] || on["storage-component"] {
@@ -923,10 +979,12 @@ func (f *Fleet) gcpProject(ctx context.Context, p string) ([]Resource, []string,
 			r := Resource{Kind: "bucket", Name: b.Name, Detail: strings.ToLower(b.Location), Created: day(b.Created), Infra: platformBucket(b.Name)}
 			if n, ok := sizes[b.Name]; ok {
 				r.Detail += " · " + bytesStr(n)
+				r.Bytes = n
 			}
 			add(r)
 		}
 	}
+	out = append(out, f.apiKeys(ctx, p)...)
 	var apis []string
 	for a := range on {
 		apis = append(apis, a)
@@ -935,6 +993,64 @@ func (f *Fleet) gcpProject(ctx context.Context, p string) ([]Resource, []string,
 }
 
 // platformBucket: buckets Google makes for App Engine, Cloud Build, Functions and Firebase.
+// apiKeys lists a project's API keys with 30 days of requests each.
+func (f *Fleet) apiKeys(ctx context.Context, p string) []Resource {
+	var out []Resource
+	// API keys: a project that "runs nothing" often exists only to hold one (a Gemini key
+	// from AI Studio, say). List them with 30 days of requests so an unused key is obvious
+	// and a project holding a live one isn't called empty. The API Keys API is asked through
+	// the quota project, since it's rarely turned on in the project that owns the key.
+	var ks struct {
+		Keys []struct {
+			UID          string `json:"uid"`
+			Name         string `json:"displayName"`
+			Created      string `json:"createTime"`
+			Restrictions struct {
+				Targets []struct {
+					Service string `json:"service"`
+				} `json:"apiTargets"`
+			} `json:"restrictions"`
+		} `json:"keys"`
+	}
+	if err := f.gget(ctx, f.cfg.QuotaProject, "https://apikeys.googleapis.com/v2/projects/"+p+"/locations/global/keys", &ks); err == nil && len(ks.Keys) > 0 {
+		uses := f.monitoring(ctx, p, "serviceruntime.googleapis.com/api/request_count", "ALIGN_SUM", "resource.label.credential_id", 30*24*time.Hour, "")
+		for _, k := range ks.Keys {
+			var svcs []string
+			for _, t := range k.Restrictions.Targets {
+				svcs = append(svcs, strings.TrimSuffix(t.Service, ".googleapis.com"))
+			}
+			detail := "any API"
+			if len(svcs) > 0 {
+				detail = strings.Join(svcs, ", ")
+			}
+			name := k.Name
+			if name == "" {
+				name = "unnamed key"
+			}
+			n := 0.0
+			if u := uses["apikey:"+k.UID]; u != nil {
+				n = u[0]
+			}
+			// Firebase makes a browser key for every web app; deleting it breaks the app's sign-in and SDK.
+			firebase := strings.Contains(name, "auto created by Firebase")
+			if firebase {
+				detail = "Firebase web SDK"
+			}
+			out = append(out, Resource{Provider: "Google Cloud", Project: p, Kind: "API key", Name: name, Detail: detail, Created: day(k.Created), Usage: compact(n) + " requests/30d", Infra: firebase})
+		}
+	}
+	return out
+}
+
+// containerRegistryBucket: the bucket gcr.io kept images in (artifacts.<project>.appspot.com,
+// or us./eu./asia. in front of it).
+func containerRegistryBucket(name string) bool {
+	n := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(name, "us."), "eu."), "asia.")
+	return strings.HasPrefix(n, "artifacts.") && strings.HasSuffix(n, ".appspot.com")
+}
+
+const cleanupNote = "cleanup policy"
+
 func platformBucket(name string) bool {
 	for _, s := range []string{".appspot.com", "_cloudbuild", "gcf-sources-", "gcf-v2-", "gcf-uploads", ".firebasestorage.app", "artifacts.", "-tfstate"} {
 		if strings.Contains(name, s) {
@@ -976,7 +1092,10 @@ func (f *Fleet) monitoring(ctx context.Context, p, metric, aligner, groupBy stri
 		} `json:"timeSeries"`
 	}
 	out := map[string][]float64{}
-	if f.gget(ctx, p, "https://monitoring.googleapis.com/v3/projects/"+p+"/timeSeries?"+q.Encode(), &r) != nil {
+	u := "https://monitoring.googleapis.com/v3/projects/" + p + "/timeSeries?" + q.Encode()
+	// Charged to the project being read; one without the Monitoring API on (an AI Studio
+	// project, say) is read through the quota project instead.
+	if f.gget(ctx, p, u, &r) != nil && (p == f.cfg.QuotaProject || f.gget(ctx, f.cfg.QuotaProject, u, &r) != nil) {
 		return out
 	}
 	for _, s := range r.Series {
@@ -1108,9 +1227,16 @@ func (f *Fleet) suggest(inv FleetInventory) []Suggestion {
 			add("check", "Snapshot "+r.Name+" is from "+r.Created, "Old snapshots are rarely restored.")
 		case r.Kind == "Cloud Run" && strings.HasPrefix(r.Usage, "0 requests"):
 			add("kill", "Cloud Run "+r.Name+" ("+r.Project+") had no requests in 30 days", "")
-		case r.Kind == "image repo" && !r.Infra && strings.HasSuffix(r.Detail, "GB"):
-			add("trim", "Image repo "+r.Name+" ("+r.Project+") holds "+strings.TrimSpace(r.Detail[strings.LastIndex(r.Detail, "·")+len("·"):]),
+		case r.Kind == "image repo" && !r.Infra && r.Bytes >= 500e6 && !strings.Contains(r.Detail, cleanupNote):
+			// 0.5 GB is the free Artifact Registry storage; past that, old images are what you pay for.
+			add("trim", "Image repo "+r.Name+" ("+r.Project+") holds "+bytesStr(r.Bytes)+" with no cleanup policy",
 				"Old images pile up with every deploy. A cleanup policy that keeps the last few is a one-time setting.")
+		case r.Kind == "bucket" && containerRegistryBucket(r.Name) && r.Bytes > 0:
+			add("kill", "Bucket "+r.Name+" ("+r.Project+") is old Container Registry storage ("+bytesStr(r.Bytes)+")",
+				"Google shut Container Registry down in 2025; images live in Artifact Registry now. Nothing reads this bucket anymore.")
+		case r.Kind == "API key" && !r.Infra && strings.HasPrefix(r.Usage, "0 requests"):
+			add("check", "API key \""+r.Name+"\" ("+r.Project+") wasn't used in 30 days",
+				"Delete it if nothing needs it, and the project too if that's all it holds.")
 		case r.Kind == "VM" && strings.HasPrefix(r.Detail, "e2-micro") && r.State == "running":
 			microsByBilling[billing[r.Project]] = append(microsByBilling[billing[r.Project]], r.Name)
 		}
@@ -1217,6 +1343,9 @@ func dnsHost(ns string) string {
 // hostOf names the platform behind a domain from its addresses and www CNAME.
 func hostOf(domain string, ips []string, cname string, byIP, byDomain map[string]Resource, res []Resource) (string, string) {
 	if r, ok := byDomain[domain]; ok {
+		if r.Kind == "Firebase site" {
+			return "Firebase Hosting", r.Name + " (" + r.Project + ")"
+		}
 		return r.Provider + " " + r.Kind, r.Name
 	}
 	for _, ip := range ips {

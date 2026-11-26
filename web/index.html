@@ -212,6 +212,11 @@
   .strip { display:flex; gap:1px; height:18px; min-width:150px; } .strip i { flex:1; border-radius:1px; background:var(--ok); }
   .strip i.none { background:#2a323c; } .strip i.slow { background:var(--warn); } .strip i.down { background:var(--bad); }
   table.fleet tr.down td:first-child a { color:var(--bad); }
+  .spark { display:flex; align-items:flex-end; gap:1px; height:24px; min-width:150px; } .spark i { flex:1; min-height:1px; border-radius:1px 1px 0 0; background:#3d6c99; }
+  .spark.human i { background:var(--ok); } .spark i.zero { background:#2a323c; }
+  .trend.up { color:var(--ok); } .trend.down { color:var(--warn); }
+  table.traffic td.site { border-right:1px solid var(--line); }
+  @media (max-width:700px) { table.traffic th:nth-child(5), table.traffic td.trend { display:none; } }
   .invgrid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill, minmax(min(100%, 520px), 1fr)); align-items:start; }
   .inv .k { display:flex; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); font-size:13px; flex-wrap:wrap; }
   .inv tr.infra td { opacity:.55; }
@@ -1416,6 +1421,28 @@ function renderFleet() {
         h('td', {}, s.domain?.host || '', s.domain?.target ? h('div', { class: 'dim' }, s.domain.target) : null),
         h('td', { class: 'mono', style: s.certDays != null && s.certDays < 14 ? 'color:var(--warn)' : '' }, s.certDays != null ? s.certDays + 'd' : '—')))))));
 
+  // Traffic: what the platforms already count, per site
+  const traffic = inv.traffic || [];
+  if (traffic.length) {
+    const rows = [];
+    for (const t of traffic) {
+      const series = t.series || [];
+      const site = h('td', { class: 'site', rowspan: Math.max(series.length, 1) }, h('a', { href: 'https://' + t.site + '/', target: '_blank', rel: 'noopener' }, t.site),
+        t.project ? h('div', { class: 'dim' }, t.project) : null);
+      if (!series.length) { rows.push(h('tr', {}, site, h('td', { colspan: 4, class: 'dim' }, t.note || 'no data'))); continue; }
+      series.forEach((s, i) => rows.push(h('tr', {}, i === 0 ? site : null,
+        h('td', {}, s.name, h('div', { class: 'dim' }, s.source + (s.human ? '' : ' · incl. bots'))),
+        h('td', {}, spark(s)),
+        h('td', {}, s.text),
+        trendCell(s.daily))));
+    }
+    kids.push(h('h2', {}, 'Traffic ', h('span', { class: 'dim', style: 'text-transform:none;letter-spacing:0' }, 'last 30 days, from what each platform already counts')),
+      h('div', { class: 'card' }, h('table', { class: 'net traffic' },
+        h('thead', {}, h('tr', {}, ['Site', 'What', 'Each day', 'Last 30 days', 'This week'].map(t => h('th', {}, t)))),
+        h('tbody', {}, rows)),
+        inv.trafficNotes?.length ? h('div', { class: 'dim', style: 'padding:8px 12px;border-top:1px solid var(--line)' }, inv.trafficNotes.join(' · ')) : null));
+  }
+
   // Domains
   kids.push(h('h2', {}, 'Domains'), h('div', { class: 'card' }, h('table', { class: 'net' },
     h('thead', {}, h('tr', {}, ['Domain', 'Website', 'DNS', 'Email', 'Renews'].map(t => h('th', {}, t)))),
@@ -1468,6 +1495,24 @@ function renderFleet() {
     h('table', { class: 'net' }, h('tbody', {}, f.fixed.map(x => h('tr', {}, h('td', {}, x.name, x.note ? h('div', { class: 'dim' }, x.note) : null), h('td', { class: 'mono', style: 'text-align:right' }, usd(x.usd) + '/mo')))))));
   kids.push(h('div', { class: 'invgrid' }, cards));
   root.replaceChildren(...kids);
+}
+const fmtBytes = n => n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : Math.round(n) + ' B';
+const fmtCount = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+// One bar per day, oldest first; the last bar is the latest day.
+function spark(s) {
+  const d = s.daily || [], top = Math.max(...d, 0) || 1, n = d.length;
+  return h('div', { class: 'spark' + (s.human ? ' human' : '') }, d.map((v, i) => {
+    const day = new Date(Date.now() - (n - 1 - i) * 864e5).toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return h('i', { class: v ? '' : 'zero', style: `height:${v ? Math.max(6, v / top * 100) : 4}%`, title: `${day}: ${s.bytes ? fmtBytes(v) : fmtCount(v)}` });
+  }));
+}
+// Last 7 days against the 7 before.
+function trendCell(d) {
+  const n = d.length, cur = d.slice(n - 7).reduce((a, x) => a + x, 0), prev = d.slice(n - 14, n - 7).reduce((a, x) => a + x, 0);
+  if (!cur && !prev) return h('td', { class: 'trend mono' }, '—');
+  if (!prev) return h('td', { class: 'trend mono up' }, 'new');
+  const ch = Math.round((cur - prev) / prev * 100);
+  return h('td', { class: 'trend mono' + (ch >= 10 ? ' up' : ch <= -10 ? ' down' : ''), title: 'last 7 days against the 7 before' }, (ch > 0 ? '+' : ch < 0 ? '−' : '') + Math.abs(ch) + '%');
 }
 const billWord = p => !p.billingKnown ? "" : p.billed ? (p.billing || "billed") : "no billing";
 let showInfra = false;

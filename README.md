@@ -169,15 +169,38 @@ Each is a file in `~/nest/` (chmod 600). Leave it out and that feature stays off
   The inventory runs every 6 hours, read-only:
   - `digitalocean.json` `{"token": "..."}`: a read-only token. It lists apps, droplets, volumes,
     snapshots, databases and IPs, with month-to-date spend and invoices.
-  - `fleet-token.json`: a Google sign-in with `cloud-platform.read-only`, made with the same OAuth
-    client (`fleet-exchange.sh`). It lists every project, plus Cloud Run (with 30-day request
-    counts), VMs (7-day CPU), disks, IPs, functions, image repos, Firebase sites and buckets.
+  - `fleet-token.json`: a Google sign-in with `cloud-platform.read-only`, `compute.readonly`,
+    `monitoring.read`, `cloud-billing.readonly` and `webmasters.readonly`, made with the same OAuth client
+    (`fleet-exchange.sh`). It lists every project with its billing account, plus Cloud Run (with
+    30-day request counts), VMs (7-day CPU), disks, IPs, functions, image repos (and whether they have
+    a cleanup policy), Firebase sites, buckets, and API keys (with 30-day request counts).
 
-  Each Google call is charged to the project it reads. The project list and billing lookups go to
-  `gcpQuotaProject`, which needs the Cloud Resource Manager and Cloud Billing APIs turned on.
+  Each Google call is charged to the project it reads. The project list, billing and API key lookups
+  go to `gcpQuotaProject`, which needs the Cloud Resource Manager, Cloud Billing and API Keys APIs
+  turned on.
   Anything that appears or disappears between inventories posts an event. The **Worth a look** list
   flags empty projects, unattached disks and volumes, unused IPs, Cloud Run with no traffic, oversized
-  App Platform plans, image repos over 1 GB, and extra e2-micro VMs beyond the free tier.
+  App Platform plans, image repos over 0.5 GB with no cleanup policy, leftover Container Registry
+  buckets, API keys unused for 30 days, and extra e2-micro VMs on one billing account beyond the free
+  tier. A project holding a used API key isn't called empty.
+
+  **Traffic.** Each public site gets 30 days of daily usage from what its platform already counts;
+  nothing is added to the sites:
+  - Firebase Hosting: bytes served per custom domain (its `*.web.app` address and redirect domains
+    fold into the main one).
+  - Cloud Run: successful requests per service, on the domain that points at it.
+  - Firebase Auth and Firestore: people signed in (per day, and so far this month) and documents
+    saved. These belong to the project's app site: the busiest Firebase site other than the project's
+    default one, or set it with `"apps": {"my-project": "app.example.com"}` in `fleet.json`.
+  - Vercel Web Analytics (visitors and pageviews): `vercel.json` `{"token": "..."}`. A token scoped
+    to one team is enough; hometron finds its projects and their domains. Projects with Web
+    Analytics turned off say so on their row.
+  - Google search clicks and impressions, if the Fleet sign-in also has `webmasters.readonly` and the
+    Search Console API is on in `gcpQuotaProject`. Every Search Console property the signed-in
+    account can see is read.
+
+  Hosting bytes and Cloud Run requests include crawlers; sign-ins, saves, search and Vercel visitors
+  are people. Sites on GitHub Pages, Vercel or a bare VM show why they have no numbers.
 
   **Google Workspace seats.** If the Fleet sign-in also has `admin.directory.user.readonly` and
   `admin.reports.usage.readonly`, Fleet lists each user with their last sign-in, the last activity

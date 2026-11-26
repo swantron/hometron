@@ -53,7 +53,12 @@ func TestFleetSuggestions(t *testing.T) {
 			{Provider: "Google Cloud", Project: "busy", Kind: "VM", Name: "a", Detail: "e2-micro · us-west1-a", State: "running"},
 			{Provider: "Google Cloud", Project: "busy", Kind: "VM", Name: "b", Detail: "e2-micro · us-central1-a", State: "running"},
 			{Provider: "Google Cloud", Project: "busy", Kind: "Cloud Run", Name: "idle", Usage: "0 requests/30d"},
-			{Provider: "Google Cloud", Project: "busy", Kind: "image repo", Name: "imgs", Detail: "us-central1 · docker · 2.2 GB"},
+			{Provider: "Google Cloud", Project: "busy", Kind: "image repo", Name: "imgs", Detail: "us-central1 · docker · 2.2 GB", Bytes: 2.2e9},
+			{Provider: "Google Cloud", Project: "busy", Kind: "image repo", Name: "tidy", Detail: "us-central1 · docker · 2.3 GB · cleanup policy", Bytes: 2.3e9},
+			{Provider: "Google Cloud", Project: "busy", Kind: "bucket", Name: "us.artifacts.busy.appspot.com", Detail: "us · 485 MB", Bytes: 485e6, Infra: true},
+			{Provider: "Google Cloud", Project: "busy", Kind: "bucket", Name: "busy.appspot.com", Detail: "us", Infra: true},
+			{Provider: "Google Cloud", Project: "gemini-key", Kind: "API key", Name: "old key", Detail: "generativelanguage", Usage: "0 requests/30d"},
+			{Provider: "Google Cloud", Project: "gemini-key", Kind: "API key", Name: "live key", Detail: "generativelanguage", Usage: "12 requests/30d"},
 		},
 	}
 	var got []string
@@ -67,7 +72,9 @@ func TestFleetSuggestions(t *testing.T) {
 		"trim: site app costs $24/mo",
 		"kill: volume old (10 GB) isn't attached",
 		"kill: Cloud Run idle (busy) had no requests",
-		"trim: Image repo imgs (busy) holds 2.2 GB",
+		"trim: Image repo imgs (busy) holds 2.2 GB with no cleanup policy",
+		"kill: Bucket us.artifacts.busy.appspot.com (busy) is old Container Registry storage (485 MB)",
+		`check: API key "old key" (gemini-key) wasn't used in 30 days`,
 		`check: 2 e2-micro VMs on billing account "Main"`,
 		"check: held.com has no website and no email",
 	} {
@@ -75,7 +82,8 @@ func TestFleetSuggestions(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, all)
 		}
 	}
-	if strings.Contains(all, "project busy") || strings.Contains(all, "project quota") || strings.Contains(all, "mail.com") {
+	if strings.Contains(all, "project busy") || strings.Contains(all, "project quota") || strings.Contains(all, "mail.com") ||
+		strings.Contains(all, "tidy") || strings.Contains(all, "live key") || strings.Contains(all, "Bucket busy.appspot.com") {
 		t.Errorf("flagged something in use:\n%s", all)
 	}
 }
