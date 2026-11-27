@@ -124,9 +124,10 @@ func TestWorkspaceSuggestions(t *testing.T) {
 		{Email: "old@x.com", TwoStep: true, LastLogin: old},
 		{Email: "new@x.com", TwoStep: true},
 		{Email: "gone@x.com", Suspended: true},
+		{Email: "teen@x.com", TwoStep: false, LastLogin: recent},
 	}}
 	var got []string
-	for _, s := range workspaceSuggestions(w) {
+	for _, s := range workspaceSuggestions(w, []string{"Teen@x.com"}) {
 		got = append(got, s.Level+": "+s.Text)
 	}
 	all := strings.Join(got, "\n")
@@ -141,7 +142,7 @@ func TestWorkspaceSuggestions(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, all)
 		}
 	}
-	if strings.Contains(all, "me@x.com") || strings.Contains(all, "gone@x.com has no 2-step") {
-		t.Errorf("flagged a healthy or suspended account:\n%s", all)
+	if strings.Contains(all, "me@x.com") || strings.Contains(all, "gone@x.com has no 2-step") || strings.Contains(all, "teen@x.com") {
+		t.Errorf("flagged a healthy, suspended or skipped account:\n%s", all)
 	}
 }

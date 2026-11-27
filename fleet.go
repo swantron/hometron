@@ -278,7 +278,7 @@ func (f *Fleet) Inventory(ctx context.Context) {
 	old := f.inv
 	f.mu.Unlock()
 	inv.Suggestions = f.suggest(inv)
-	inv.Suggestions = append(inv.Suggestions, workspaceSuggestions(inv.Workspace)...)
+	inv.Suggestions = append(inv.Suggestions, workspaceSuggestions(inv.Workspace, f.skip2SV())...)
 	if old.At.IsZero() || (len(inv.Errors) == 0 && len(old.Errors) == 0) {
 		f.diff(old, inv)
 	}

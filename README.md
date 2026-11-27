@@ -206,7 +206,9 @@ Each is a file in `~/nest/` (chmod 600). Leave it out and that feature stays off
   `admin.reports.usage.readonly`, Fleet lists each user with their last sign-in, the last activity
   per app (from Google's usage report, which trails by 2–4 days) and whether they have 2-step
   verification. It flags suspended accounts that are still billed, seats unused for 60 days, and
-  accounts with no 2-step verification. Admins without it are marked "fix".
+  accounts with no 2-step verification. Admins without it are marked "fix". To leave an account
+  without 2-step verification on purpose, list it in `"skip2SV": ["kid@example.com"]` under
+  `"workspace"`.
 
   Google has no billing API for Workspace bought directly, so set the price in `fleet.json`:
   `"workspace": {"plan": "Business Standard", "usdPerUser": 14}`. A Workspace domain that blocks

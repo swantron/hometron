@@ -12,10 +12,12 @@ import (
 // Read-only Admin SDK (Directory users + Reports usage), on the same sign-in as the
 // Google Cloud inventory. Google has no billing API for Workspace bought directly, so
 // the price per seat comes from fleet.json: "workspace": {"plan": "...", "usdPerUser": 8.4}.
+// "skip2SV": ["kid@example.com"] lists accounts left without 2-step verification on purpose.
 
 type workspaceConfig struct {
-	Plan       string  `json:"plan"`
-	USDPerUser float64 `json:"usdPerUser"`
+	Plan       string   `json:"plan"`
+	USDPerUser float64  `json:"usdPerUser"`
+	Skip2SV    []string `json:"skip2SV"`
 }
 
 type WorkspaceView struct {
@@ -124,8 +126,9 @@ func (f *Fleet) workspace(ctx context.Context) (*WorkspaceView, error) {
 	return w, nil
 }
 
-// workspaceSuggestions: unused or risky seats.
-func workspaceSuggestions(w *WorkspaceView) []Suggestion {
+// workspaceSuggestions: unused or risky seats. Accounts in skip2SV aren't flagged for
+// missing 2-step verification.
+func workspaceSuggestions(w *WorkspaceView, skip2SV []string) []Suggestion {
 	if w == nil {
 		return nil
 	}
@@ -145,7 +148,7 @@ func workspaceSuggestions(w *WorkspaceView) []Suggestion {
 			out = append(out, Suggestion{Level: "check", Text: "Workspace user " + u.Email + " hasn't signed in since " + u.LastLogin,
 				Why: "Mail may still be arriving there (check the last Gmail activity)." + price})
 		}
-		if !u.Suspended && !u.TwoStep {
+		if !u.Suspended && !u.TwoStep && !containsFold(skip2SV, u.Email) {
 			lvl := "check"
 			if u.Admin {
 				lvl = "fix"
@@ -155,4 +158,20 @@ func workspaceSuggestions(w *WorkspaceView) []Suggestion {
 		}
 	}
 	return out
+}
+
+func containsFold(list []string, s string) bool {
+	for _, v := range list {
+		if strings.EqualFold(strings.TrimSpace(v), s) {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *Fleet) skip2SV() []string {
+	if f.cfg.Workspace == nil {
+		return nil
+	}
+	return f.cfg.Workspace.Skip2SV
 }
